@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -15,10 +16,12 @@ using osu.Game.Rulesets.UI;
 using osu.Game.Screens.Play;
 using osuTK;
 using osu.Framework.Graphics.Sprites;
+using osu.Game.Rulesets.Osu.UI;
+using osu.Game.Rulesets.Osu.UI.Cursor;
 
 namespace osu.Game.Rulesets.Osu.Mods
 {
-    public partial class OsuModChaos : Mod, IUpdatableByPlayfield, IApplicableToDrawableRuleset<OsuHitObject>, IApplicableToPlayer
+    public partial class OsuModChaos : Mod, IUpdatableByPlayfield, IApplicableToDrawableRuleset<OsuHitObject>, IApplicableToPlayer, IApplicableToTrack
     {
         public override string Name => "Chaos Remote";
         public override string Acronym => "CHR";
@@ -67,6 +70,46 @@ namespace osu.Game.Rulesets.Osu.Mods
         public static volatile bool IsMirrorHudX = false;
         public static volatile bool IsMirrorHudY = false;
         
+        // Speed
+        public static volatile float SpeedChange = 1.0f;
+        public static volatile bool AdjustPitch = false;
+
+        // Input Lag
+        public static volatile float InputLagMilliseconds = 0;
+
+        // Cursor Scale Multiplier
+        public static volatile float CursorScaleMultiplier = 1.0f;
+
+        // Invert Controls
+        public static volatile bool InvertX = false;
+        public static volatile bool InvertY = false;
+
+        // Key Jam
+        public static volatile bool JamK1 = false;
+        public static volatile bool JamK2 = false;
+
+        // Black Hole (Gravity to center)
+        public static volatile bool IsBlackHoleActive = false;
+        public static volatile float BlackHoleStrength = 1.0f;
+
+        // Audio Desync
+        public static volatile float AudioDesyncMilliseconds = 0;
+
+        // Chameleon Notes
+        public enum ChameleonType { Off, Black, Rainbow, Monochrome }
+        public static volatile ChameleonType ChameleonMode = ChameleonType.Off;
+        private ChameleonType lastChameleonMode = ChameleonType.Off;
+
+        // Troll Notifications
+        public static volatile bool TriggerTrollBattery = false;
+        public static volatile bool TriggerTrollDiscord = false;
+        public static volatile bool TriggerTrollBsod = false;
+        public static volatile bool TriggerTrollDefender = false;
+        private TrollOverlay? trollOverlay;
+
+        private readonly osu.Framework.Bindables.BindableDouble tempoAdjustment = new osu.Framework.Bindables.BindableDouble(1);
+        private readonly osu.Framework.Bindables.BindableDouble frequencyAdjustment = new osu.Framework.Bindables.BindableDouble(1);
+        
         public static Player? PlayerInstance;
         private Container cachedHudOverlay;
 
@@ -76,8 +119,12 @@ namespace osu.Game.Rulesets.Osu.Mods
 
         private WindOverlay? windOverlay;
         private BlackoutOverlay? blackoutOverlay;
-        private ScreamerOverlay? screamerOverlay;
+        public ScreamerOverlay screamerOverlay;
+        public static FakeCursorOverlay FakeCursorOverlayInstance;
+        public static HiddenCursorOverlay HiddenCursorOverlayInstance;
         private FlashbangOverlay? flashbangOverlay;
+        private BlackHoleOverlay? blackHoleOverlay;
+        public static HallucinationOverlay? HallucinationOverlayInstance;
 
         public OsuModChaos()
         {
@@ -207,6 +254,117 @@ namespace osu.Game.Rulesets.Osu.Mods
                                 else if (msg == "MIRROR_HUD_X_OFF") IsMirrorHudX = false;
                                 else if (msg == "MIRROR_HUD_Y_ON") IsMirrorHudY = true;
                                 else if (msg == "MIRROR_HUD_Y_OFF") IsMirrorHudY = false;
+                                else if (msg == "PITCH_ON") AdjustPitch = true;
+                                else if (msg == "PITCH_OFF") AdjustPitch = false;
+                                else if (msg.StartsWith("SPEED:"))
+                                {
+                                    if (float.TryParse(msg.Substring(6), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float speed))
+                                        SpeedChange = speed;
+                                }
+                                else if (msg.StartsWith("FAKE_NOTE:"))
+                                {
+                                    var parts = msg.Substring(10).Split(':');
+                                    if (parts.Length == 2 && float.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float x)
+                                                          && float.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float y))
+                                    {
+                                        if (HallucinationOverlayInstance != null)
+                                        {
+                                            HallucinationOverlayInstance.ScheduleAction(() => {
+                                                if (PlayerInstance != null)
+                                                {
+                                                    var beatmap = PlayerInstance.GameplayState.Beatmap;
+                                                    float cs = beatmap.BeatmapInfo.Difficulty.CircleSize;
+                                                    float ar = beatmap.BeatmapInfo.Difficulty.ApproachRate;
+                                                    
+                                                    // osu! standard scale and AR logic
+                                                    float scale = (1.0f - 0.7f * (cs - 5) / 5) / 2f;
+                                                    double preempt = osu.Game.Beatmaps.IBeatmapDifficultyInfo.DifficultyRange(ar, 1800, 1200, 450);
+                                                    
+                                                    // Default osu combo color
+                                                    var color = osuTK.Graphics.Color4.White;
+
+                                                    var playfield = HallucinationOverlayInstance.Playfield;
+                                                    if (playfield != null)
+                                                    {
+                                                        HallucinationOverlayInstance.SpawnFakeNote(new osuTK.Vector2(x, y), scale, preempt, color);
+                                                    }
+                                                }
+                                            });
+                                        }
+                                    }
+                                }
+                                else if (msg.StartsWith("FAKE_CURSORS:"))
+                                {
+                                    string mode = msg.Split(':')[1];
+                                    if (HallucinationOverlayInstance != null)
+                                    {
+                                        HallucinationOverlayInstance.ScheduleAction(() => {
+                                            FakeCursorOverlayInstance?.SetMode(mode);
+                                        });
+                                    }
+                                }
+                                else if (msg.StartsWith("HIDE_CURSOR:"))
+                                {
+                                    bool isHidden = msg.Split(':')[1] == "ON";
+                                    if (HallucinationOverlayInstance != null)
+                                    {
+                                        HallucinationOverlayInstance.ScheduleAction(() => {
+                                            HiddenCursorOverlayInstance?.SetHidden(isHidden);
+                                        });
+                                    }
+                                }
+                                else if (msg.StartsWith("INPUT_LAG:"))
+                                {
+                                    if (float.TryParse(msg.Substring(10), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float lagMs))
+                                    {
+                                        InputLagMilliseconds = Math.Max(0f, lagMs);
+                                    }
+                                }
+                                else if (msg.StartsWith("CURSOR_SCALE:"))
+                                {
+                                    if (float.TryParse(msg.Substring(13), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float scale))
+                                    {
+                                        CursorScaleMultiplier = Math.Clamp(scale, 0.05f, 10.0f);
+                                    }
+                                }
+                                else if (msg == "INVERT_X_ON") InvertX = true;
+                                else if (msg == "INVERT_X_OFF") InvertX = false;
+                                else if (msg == "INVERT_Y_ON") InvertY = true;
+                                else if (msg == "INVERT_Y_OFF") InvertY = false;
+                                else if (msg == "INVERT_RESET") { InvertX = false; InvertY = false; }
+                                else if (msg == "JAM_K1_ON") JamK1 = true;
+                                else if (msg == "JAM_K1_OFF") JamK1 = false;
+                                else if (msg == "JAM_K2_ON") JamK2 = true;
+                                else if (msg == "JAM_K2_OFF") JamK2 = false;
+                                else if (msg == "JAM_RESET") { JamK1 = false; JamK2 = false; }
+                                else if (msg == "BLACK_HOLE_ON") IsBlackHoleActive = true;
+                                else if (msg == "BLACK_HOLE_OFF") IsBlackHoleActive = false;
+                                else if (msg.StartsWith("BLACK_HOLE_STRENGTH:"))
+                                {
+                                    if (float.TryParse(msg.Substring(20), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float bhStrength))
+                                        BlackHoleStrength = bhStrength;
+                                }
+                                else if (msg.StartsWith("AUDIO_DESYNC:"))
+                                {
+                                    if (float.TryParse(msg.Substring(13), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float desyncMs))
+                                    {
+                                        AudioDesyncMilliseconds = desyncMs;
+                                        osu.Game.Beatmaps.FramedBeatmapClock.ExternalAudioOffset = desyncMs;
+                                    }
+                                }
+                                else if (msg == "AUDIO_DESYNC_RESET")
+                                {
+                                    AudioDesyncMilliseconds = 0;
+                                    osu.Game.Beatmaps.FramedBeatmapClock.ExternalAudioOffset = 0;
+                                }
+                                else if (msg == "CHAMELEON_OFF") ChameleonMode = ChameleonType.Off;
+                                else if (msg == "CHAMELEON_BLACK") ChameleonMode = ChameleonType.Black;
+                                else if (msg == "CHAMELEON_RAINBOW") ChameleonMode = ChameleonType.Rainbow;
+                                else if (msg == "CHAMELEON_MONO") ChameleonMode = ChameleonType.Monochrome;
+                                else if (msg == "TROLL_BATTERY" || msg == "TROLL:BATTERY") TriggerTrollBattery = true;
+                                else if (msg == "TROLL_DISCORD" || msg == "TROLL:DISCORD") TriggerTrollDiscord = true;
+                                else if (msg == "TROLL_BSOD" || msg == "TROLL:BSOD") TriggerTrollBsod = true;
+                                else if (msg == "TROLL_DEFENDER" || msg == "TROLL:DEFENDER") TriggerTrollDefender = true;
                             }
                         }
                     }
@@ -219,20 +377,56 @@ namespace osu.Game.Rulesets.Osu.Mods
 
         public void ApplyToDrawableRuleset(DrawableRuleset<OsuHitObject> drawableRuleset)
         {
+            var osuRuleset = (DrawableOsuRuleset)drawableRuleset;
+            osuRuleset.KeyBindingInputManager.Add(new KeyJamInterceptor());
+
             // Добавляем слои поверх всего
             windOverlay = new WindOverlay();
             blackoutOverlay = new BlackoutOverlay();
             screamerOverlay = new ScreamerOverlay();
             flashbangOverlay = new FlashbangOverlay();
+            HallucinationOverlayInstance = new HallucinationOverlay();
+            
+            // Note: drawableRuleset.Cursor is GameplayCursorContainer
+            FakeCursorOverlayInstance = new FakeCursorOverlay((GameplayCursorContainer)drawableRuleset.Cursor);
+            HiddenCursorOverlayInstance = new HiddenCursorOverlay((GameplayCursorContainer)drawableRuleset.Cursor);
+
+            HallucinationOverlayInstance.Playfield = drawableRuleset.Playfield;
             
             drawableRuleset.Overlays.Add(windOverlay);
             drawableRuleset.Overlays.Add(blackoutOverlay);
             drawableRuleset.Overlays.Add(flashbangOverlay);
             drawableRuleset.Overlays.Add(screamerOverlay);
+
+            trollOverlay = new TrollOverlay();
+            drawableRuleset.Overlays.Add(trollOverlay);
+            
+            blackHoleOverlay = new BlackHoleOverlay();
+            drawableRuleset.PlayfieldAdjustmentContainer.Add(blackHoleOverlay);
+
+            drawableRuleset.PlayfieldAdjustmentContainer.Add(HallucinationOverlayInstance);
+            drawableRuleset.PlayfieldAdjustmentContainer.Add(FakeCursorOverlayInstance);
+            drawableRuleset.PlayfieldAdjustmentContainer.Add(HiddenCursorOverlayInstance);
+        }
+
+        public void ApplyToTrack(osu.Framework.Audio.IAdjustableAudioComponent track)
+        {
+            track.AddAdjustment(osu.Framework.Audio.AdjustableProperty.Tempo, tempoAdjustment);
+            track.AddAdjustment(osu.Framework.Audio.AdjustableProperty.Frequency, frequencyAdjustment);
         }
 
         public void Update(Playfield playfield)
         {
+            if (AdjustPitch)
+            {
+                frequencyAdjustment.Value = SpeedChange;
+                tempoAdjustment.Value = 1.0;
+            }
+            else
+            {
+                tempoAdjustment.Value = SpeedChange;
+                frequencyAdjustment.Value = 1.0;
+            }
             if (windOverlay != null)
             {
                 windOverlay.IsActive = IsWindActive;
@@ -268,6 +462,51 @@ namespace osu.Game.Rulesets.Osu.Mods
                 }
             }
 
+            if (blackHoleOverlay != null)
+            {
+                blackHoleOverlay.IsActive = IsBlackHoleActive;
+                blackHoleOverlay.Strength = BlackHoleStrength;
+            }
+
+            if (trollOverlay != null)
+            {
+                if (TriggerTrollBattery)
+                {
+                    trollOverlay.ShowBatteryAlert();
+                    TriggerTrollBattery = false;
+                }
+                if (TriggerTrollDiscord)
+                {
+                    trollOverlay.ShowDiscordCall();
+                    TriggerTrollDiscord = false;
+                }
+                if (TriggerTrollBsod)
+                {
+                    trollOverlay.ShowBsod();
+                    TriggerTrollBsod = false;
+                }
+                if (TriggerTrollDefender)
+                {
+                    trollOverlay.ShowDefenderAlert();
+                    TriggerTrollDefender = false;
+                }
+            }
+
+            osu.Game.Beatmaps.FramedBeatmapClock.ExternalAudioOffset = AudioDesyncMilliseconds;
+
+            if (lastChameleonMode != ChameleonMode)
+            {
+                if (ChameleonMode == ChameleonType.Off)
+                {
+                    foreach (var d in playfield.HitObjectContainer.AliveObjects)
+                    {
+                        var method = typeof(osu.Game.Rulesets.Objects.Drawables.DrawableHitObject).GetMethod("UpdateComboColour", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                        method?.Invoke(d, null);
+                    }
+                }
+                lastChameleonMode = ChameleonMode;
+            }
+
             // HUD Scaling (via reflection)
             if (PlayerInstance != null)
             {
@@ -294,6 +533,14 @@ namespace osu.Game.Rulesets.Osu.Mods
             float driftAmount = (elapsed / 1000f) * 150f * WindStrength;
 
             Vector2? cursorPos = playfield.Cursor?.ActiveCursor?.DrawPosition;
+
+            if (playfield.Cursor is OsuCursorContainer osuCursorContainer && osuCursorContainer.ActiveCursor != null)
+            {
+                if (osuCursorContainer.ActiveCursor.ModScaleAdjust.Value != CursorScaleMultiplier)
+                {
+                    osuCursorContainer.ActiveCursor.ModScaleAdjust.Value = CursorScaleMultiplier;
+                }
+            }
             
             // Землетрясение (Тряска интерфейса) и Искажение
             float px = PlayfieldScaleX * (IsMirrorPlayfieldX ? -1 : 1);
@@ -349,12 +596,55 @@ namespace osu.Game.Rulesets.Osu.Mods
                     }
                 }
 
-                if (drawable is osu.Game.Rulesets.Osu.Skinning.IHasApproachCircle approachObj && approachObj.ApproachCircle != null)
+                // Чёрная дыра (Гравитация к центру поля 256, 192)
+                if (IsBlackHoleActive)
                 {
-                    if (IsHiddenActive)
-                        approachObj.ApproachCircle.Colour = Colour4.Transparent;
-                    else
-                        approachObj.ApproachCircle.Colour = Colour4.White;
+                    Vector2 bhCenter = new Vector2(256, 192);
+                    Vector2 toCenter = bhCenter - drawable.Position;
+                    float distance = toCenter.Length;
+                    if (distance > 1f)
+                    {
+                        float pullSpeed = (elapsed / 1000f) * 140f * BlackHoleStrength;
+                        drawable.Position += toCenter.Normalized() * Math.Min(distance, pullSpeed);
+                    }
+                }
+
+                // Хамелеон (Подмена цвета нот)
+                if (ChameleonMode != ChameleonType.Off)
+                {
+                    Colour4 targetColor;
+                    if (ChameleonMode == ChameleonType.Black)
+                        targetColor = Colour4.FromHex("#11111b");
+                    else if (ChameleonMode == ChameleonType.Monochrome)
+                        targetColor = Colour4.FromHex("#cfd8dc");
+                    else // Rainbow
+                    {
+                        float hue = (float)((playfield.Clock.CurrentTime / 5.0) % 360.0);
+                        targetColor = Colour4.FromHSV(hue, 1f, 1f);
+                    }
+
+                    drawable.AccentColour.Value = targetColor;
+
+                    foreach (var nested in drawable.NestedHitObjects)
+                    {
+                        nested.AccentColour.Value = targetColor;
+                    }
+
+                    if (drawable is osu.Game.Rulesets.Osu.Skinning.IHasApproachCircle approachObj && approachObj.ApproachCircle != null)
+                    {
+                        if (!IsHiddenActive)
+                            approachObj.ApproachCircle.Colour = targetColor;
+                    }
+                }
+                else
+                {
+                    if (drawable is osu.Game.Rulesets.Osu.Skinning.IHasApproachCircle approachObj && approachObj.ApproachCircle != null)
+                    {
+                        if (IsHiddenActive)
+                            approachObj.ApproachCircle.Colour = Colour4.Transparent;
+                        else
+                            approachObj.ApproachCircle.Colour = Colour4.White;
+                    }
                 }
 
                 foreach (var nested in drawable.NestedHitObjects)
@@ -363,7 +653,7 @@ namespace osu.Game.Rulesets.Osu.Mods
                     {
                         if (IsHiddenActive)
                             nestedApproachObj.ApproachCircle.Colour = Colour4.Transparent;
-                        else
+                        else if (ChameleonMode == ChameleonType.Off)
                             nestedApproachObj.ApproachCircle.Colour = Colour4.White;
                     }
                 }
@@ -602,6 +892,104 @@ namespace osu.Game.Rulesets.Osu.Mods
                 flashBox.ClearTransforms();
                 flashBox.Alpha = 1;
                 flashBox.FadeOut(3000, Easing.OutQuint);
+            }
+        }
+
+        private partial class KeyJamInterceptor : Component, osu.Framework.Input.Bindings.IKeyBindingHandler<OsuAction>
+        {
+            public bool OnPressed(osu.Framework.Input.Events.KeyBindingPressEvent<OsuAction> e)
+            {
+                if (JamK1 && e.Action == OsuAction.LeftButton)
+                    return true;
+
+                if (JamK2 && e.Action == OsuAction.RightButton)
+                    return true;
+
+                return false;
+            }
+
+            public void OnReleased(osu.Framework.Input.Events.KeyBindingReleaseEvent<OsuAction> e)
+            {
+            }
+        }
+
+        public partial class BlackHoleOverlay : CompositeDrawable
+        {
+            public bool IsActive;
+            public float Strength = 1.0f;
+
+            private Container vortexContainer = null!;
+            private CircularContainer disc = null!;
+
+            public BlackHoleOverlay()
+            {
+                Origin = Anchor.Centre;
+                Anchor = Anchor.TopLeft;
+                Position = new Vector2(256, 192);
+                Size = new Vector2(160);
+            }
+
+            [BackgroundDependencyLoader]
+            private void load()
+            {
+                InternalChildren = new Drawable[]
+                {
+                    vortexContainer = new Container
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Anchor = Anchor.Centre,
+                        Origin = Anchor.Centre,
+                        Alpha = 0,
+                        Children = new Drawable[]
+                        {
+                            disc = new CircularContainer
+                            {
+                                RelativeSizeAxes = Axes.Both,
+                                Anchor = Anchor.Centre,
+                                Origin = Anchor.Centre,
+                                Masking = true,
+                                BorderThickness = 6,
+                                BorderColour = Colour4.FromHex("#9c27b0"),
+                                Child = new Box
+                                {
+                                    RelativeSizeAxes = Axes.Both,
+                                    Colour = Colour4.FromHex("#311b92").Opacity(0.35f)
+                                }
+                            },
+                            new CircularContainer
+                            {
+                                Size = new Vector2(70),
+                                Anchor = Anchor.Centre,
+                                Origin = Anchor.Centre,
+                                Masking = true,
+                                BorderThickness = 3,
+                                BorderColour = Colour4.FromHex("#ea80fc"),
+                                Child = new Box
+                                {
+                                    RelativeSizeAxes = Axes.Both,
+                                    Colour = Colour4.Black
+                                }
+                            }
+                        }
+                    }
+                };
+            }
+
+            protected override void Update()
+            {
+                base.Update();
+
+                if (IsActive)
+                {
+                    vortexContainer.FadeTo(0.9f, 250);
+                    vortexContainer.Rotation += (float)Clock.ElapsedFrameTime * 0.15f * Strength;
+                    float pulse = 1.0f + 0.08f * (float)Math.Sin(Clock.CurrentTime / 150.0);
+                    disc.Scale = new Vector2(pulse);
+                }
+                else
+                {
+                    vortexContainer.FadeOut(250);
+                }
             }
         }
     }

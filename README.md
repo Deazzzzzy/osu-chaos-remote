@@ -2,39 +2,73 @@
 
 [Русская версия](README.ru.md)
 
-A custom fun mod for **osu!lazer** that allows a second person (e.g., a streamer's chat or a friend) to interactively manipulate the gameplay in real-time. The mod communicates with a Python-based Control Panel via a TCP socket, enabling dynamic control over the game's difficulty and UI.
+A fun interactive mod for **osu!lazer** that allows a second person (such as stream chat, friends, or donors) to intervene in the gameplay in real time. The mod communicates with a Python-based graphical control panel over a local TCP socket, allowing dynamic control over game physics, cursor behavior, notes, audio sync, and sudden troll events.
 
-## Features
+---
 
-- **Wind / Gravity**: Push notes across the screen with adjustable strength and direction.
-- **Magnet**: Force notes to repel from the player's cursor dynamically.
-- **Earthquake**: Induce screen shake across the entire UI and playfield.
-- **Flashbang**: Temporarily blind the player with a white screen flash.
-- **Hidden**: Toggle the standard "Hidden" mode (invisible approach circles) on and off mid-game.
-- **Blackout (Time Freeze)**: Freeze the game state for 5 seconds while the song continues playing.
-- **Kiss**: Spawn a massive visual distraction in the middle of the screen.
-- **Fake Miss**: Play a fake miss sound and animation to bait the player.
-- **Playfield & UI Distortion**: Shrink, stretch, or squash the game interface and playfield on the X and Y axes independently.
-- **Mirror Mode**: Flip the playfield or the UI horizontally and vertically.
+## 🎮 Features & Debuffs
 
-## Installation
+### 1. Cursor & Controls
+- **Hardware-Level Input Lag**: True cursor input buffering in milliseconds.
+- **Hidden Cursor**: Completely hide the player's cursor during gameplay.
+- **Schizophrenia (Fake Cursors)**: Spawn duplicate cursor copies with trails (mirrored, lagging, swarm).
+- **Cursor Scaling**: Resize cursor from tiny (0.1x) to gigantic (5.0x).
+- **Invert Controls**: Flip cursor coordinates horizontally (X) and vertically (Y).
+- **Key Jam**: Block Left (K1) or Right (K2) keys to force single-tap play.
+
+### 2. Playfield & Note Physics
+- **Wind / Gravity**: Blow notes across the screen with configurable strength and direction (0°–360°).
+- **Magnet**: Dynamically repel notes away from the player's cursor.
+- **Black Hole**: A singularity vortex at screen center (256, 192) pulling notes inward.
+- **Chameleon Notes**: Override combo colors of notes, sliders, and approach circles (Stealth Black, Rainbow Disco, Monochrome).
+
+### 3. Screen Distortion & Audio
+- **Audio Desync**: Shift the audio track timing relative to notes (-300ms to +300ms).
+- **Earthquake**: Shake the playfield and HUD dynamically.
+- **Scale Distortion**: Compress or stretch playfield and HUD along X and Y axes.
+- **Mirroring**: Flip playfield or HUD horizontally and vertically.
+
+### 4. Sudden Events & Trolling
+- **Low Battery 5% 🔋**: Windows toast alert with warning sound.
+- **Discord Incoming Call 📞**: Discord call popup with avatar, wobble effect, and accept/decline buttons.
+- **Blue Screen of Death (BSOD) 💻**: Fullscreen Windows BSOD (`CRITICAL_PROCESS_DIED`, `osu!.exe`) with critical stop chime for 3 seconds.
+- **Windows Defender Threat 🛡️**: Windows Security alert toast warning about malware.
+- **Blackout (Time Freeze)**: Stop all hit objects for 5 seconds while audio continues playing.
+- **Flashbang 💥**: Fullscreen blinding white flash with gradual fade out.
+- **Kiss 💋 & Fake Miss ❌**: Distracting visual overlays and fake combo break sounds.
+- **Hallucination Radar**: Clickable radar in the control panel to spawn fake notes on demand.
+
+---
+
+## 🚀 Installation & Setup
 
 ### 1. Control Panel (Python)
-The Control Panel requires Python 3. No external dependencies are required, as it uses the built-in `tkinter` for the GUI and `socket` for networking.
+Requires Python 3. Uses standard libraries (`tkinter` and `socket`), no external packages needed.
 
-1. Navigate to the `ControlPanel/` directory.
-2. Run the application:
-```cmd
+```powershell
+cd ControlPanel
 python main.py
 ```
 
 ### 2. osu! Mod (C#)
-Since osu!lazer does not currently support loading third-party mods as external plugins, this mod must be compiled directly into the game's source code.
+1. Clone the [osu!lazer repository](https://github.com/ppy/osu).
+2. Copy the mod source files from `OsuMod/` into `osu/osu.Game.Rulesets.Osu/Mods/`:
+   - `OsuModChaos.cs`
+   - `TrollOverlay.cs`
+   - `FakeCursorOverlay.cs`
+   - `HiddenCursorOverlay.cs`
+   - `HallucinationOverlay.cs`
+   - `call_calling.mp3`
+3. Register the mod in `osu.Game.Rulesets.Osu/OsuRuleset.cs` within `GetModsFor()`:
+   ```csharp
+   new OsuModChaos(),
+   ```
+4. Build and run:
+   ```powershell
+   dotnet run --project osu.Desktop/osu.Desktop.csproj -c Debug
+   ```
 
-1. Clone the official [osu! source code](https://github.com/ppy/osu).
-2. Copy `OsuModChaos.cs` from the `OsuMod/` folder in this repository into `osu/osu.Game.Rulesets.Osu/Mods/`.
-3. Open `osu.Game.Rulesets.Osu/OsuRuleset.cs` and register the mod by adding `new OsuModChaos()` to the `GetModsFor()` method (e.g., under `ModType.Fun` or `ModType.Conversion`).
-4. Build and run the `osu.Desktop` project.
+---
 
-## How it Works
-When the mod is selected and active in-game, it initializes a local TCP server listening on port `2826`. The Python Control Panel connects to `127.0.0.1:2826` and sends plain-text commands (e.g., `WIND_ON`, `EARTHQUAKE_STRENGTH:1.5`, `FLASHBANG`). The mod parses these incoming commands and dynamically overrides the `DrawableHitObject` transforms and playfield properties in real-time.
+## 📡 Network Protocol
+The mod listens on TCP port **9000** (`127.0.0.1:9000`). The Python Control Panel sends plain text commands (e.g. `TROLL:BSOD`, `BLACK_HOLE_ON`, `INPUT_LAG:150`), and the game applies them immediately in the active session.
