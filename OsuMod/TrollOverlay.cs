@@ -556,16 +556,49 @@ namespace osu.Game.Rulesets.Osu.Mods
                 .FadeOut(250);
         }
 
+        private readonly System.Diagnostics.Stopwatch bsodTimer = new System.Diagnostics.Stopwatch();
+        public bool IsBsodActive { get; private set; }
+        public float BsodElapsed => (float)bsodTimer.Elapsed.TotalMilliseconds;
+
         public void ShowBsod()
         {
             playSystemSound(mb_iconhand);
             combobreakSample?.Play();
 
             bsodContainer.ClearTransforms();
-            bsodContainer.Alpha = 0;
-            bsodContainer.FadeIn(40)
-                .Delay(3000)
-                .FadeOut(400);
+            bsodContainer.Alpha = 1f;
+
+            bsodTimer.Restart();
+            IsBsodActive = true;
+        }
+
+        protected override void Update()
+        {
+            base.Update();
+
+            if (IsBsodActive)
+            {
+                float elapsed = BsodElapsed;
+                const float holdDuration = 3000f;
+                const float fadeDuration = 400f;
+                const float totalDuration = holdDuration + fadeDuration;
+
+                if (elapsed < holdDuration)
+                {
+                    bsodContainer.Alpha = 1f;
+                }
+                else if (elapsed < totalDuration)
+                {
+                    float progress = (elapsed - holdDuration) / fadeDuration;
+                    bsodContainer.Alpha = 1f - progress;
+                }
+                else
+                {
+                    bsodContainer.Alpha = 0f;
+                    bsodTimer.Stop();
+                    IsBsodActive = false;
+                }
+            }
         }
 
         public void ScheduleDelayed(Action action, double delay)

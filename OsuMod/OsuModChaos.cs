@@ -108,6 +108,34 @@ namespace osu.Game.Rulesets.Osu.Mods
         public static volatile bool TriggerTrollDefender = false;
         public static GameplayCursorContainer? GameplayCursorInstance;
         private TrollOverlay? trollOverlay;
+        public static volatile bool IsBsodRunning = false;
+        private bool wasBsodActive = false;
+
+        public static void StopGameplayClock()
+        {
+            if (PlayerInstance != null)
+            {
+                var prop = typeof(Player).GetProperty("GameplayClockContainer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                var clock = prop?.GetValue(PlayerInstance);
+                if (clock != null)
+                {
+                    clock.GetType().GetMethod("Stop")?.Invoke(clock, null);
+                }
+            }
+        }
+
+        public static void StartGameplayClock()
+        {
+            if (PlayerInstance != null)
+            {
+                var prop = typeof(Player).GetProperty("GameplayClockContainer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                var clock = prop?.GetValue(PlayerInstance);
+                if (clock != null)
+                {
+                    clock.GetType().GetMethod("Start")?.Invoke(clock, null);
+                }
+            }
+        }
 
         private readonly osu.Framework.Bindables.BindableDouble tempoAdjustment = new osu.Framework.Bindables.BindableDouble(1);
         private readonly osu.Framework.Bindables.BindableDouble frequencyAdjustment = new osu.Framework.Bindables.BindableDouble(1);
@@ -492,6 +520,13 @@ namespace osu.Game.Rulesets.Osu.Mods
                 if (TriggerTrollBsod)
                 {
                     trollOverlay.ShowBsod();
+                    TriggerTrollBsod = false;
+                }
+
+                if (trollOverlay.IsBsodActive && !wasBsodActive)
+                {
+                    IsBsodRunning = true;
+                    StopGameplayClock();
 
                     if (PlayerInstance != null && cachedHudOverlay == null)
                     {
@@ -503,22 +538,61 @@ namespace osu.Game.Rulesets.Osu.Mods
                     if (cachedHudOverlay != null)
                     {
                         cachedHudOverlay.ClearTransforms();
-                        cachedHudOverlay.FadeOut(40).Delay(3000).FadeIn(400);
+                        cachedHudOverlay.Alpha = 0f;
                     }
 
                     if (GameplayCursorInstance != null)
                     {
                         GameplayCursorInstance.ClearTransforms();
-                        GameplayCursorInstance.FadeOut(40).Delay(3000).FadeIn(400);
+                        GameplayCursorInstance.Alpha = 0f;
                     }
 
                     HiddenCursorOverlayInstance?.SetHidden(true);
-                    trollOverlay.ScheduleDelayed(() =>
+                    wasBsodActive = true;
+                }
+                else if (!trollOverlay.IsBsodActive && wasBsodActive)
+                {
+                    IsBsodRunning = false;
+                    if (!IsFreezeActive)
                     {
-                        HiddenCursorOverlayInstance?.SetHidden(false);
-                    }, 3400);
+                        StartGameplayClock();
+                    }
 
-                    TriggerTrollBsod = false;
+                    if (cachedHudOverlay != null)
+                    {
+                        cachedHudOverlay.ClearTransforms();
+                        cachedHudOverlay.Alpha = 1f;
+                    }
+
+                    if (GameplayCursorInstance != null)
+                    {
+                        GameplayCursorInstance.ClearTransforms();
+                        GameplayCursorInstance.Alpha = 1f;
+                    }
+
+                    HiddenCursorOverlayInstance?.SetHidden(false);
+                    wasBsodActive = false;
+                }
+                else if (trollOverlay.IsBsodActive)
+                {
+                    float bsodElapsed = trollOverlay.BsodElapsed;
+                    const float holdDuration = 3000f;
+                    const float fadeDuration = 400f;
+                    if (bsodElapsed > holdDuration)
+                    {
+                        float progress = Math.Clamp((bsodElapsed - holdDuration) / fadeDuration, 0f, 1f);
+                        if (cachedHudOverlay != null)
+                            cachedHudOverlay.Alpha = progress;
+                        if (GameplayCursorInstance != null)
+                            GameplayCursorInstance.Alpha = progress;
+                    }
+                    else
+                    {
+                        if (cachedHudOverlay != null)
+                            cachedHudOverlay.Alpha = 0f;
+                        if (GameplayCursorInstance != null)
+                            GameplayCursorInstance.Alpha = 0f;
+                    }
                 }
                 if (TriggerTrollDefender)
                 {
@@ -797,15 +871,7 @@ namespace osu.Game.Rulesets.Osu.Mods
                 {
                     powerDownSample?.Play();
                     
-                    if (PlayerInstance != null)
-                    {
-                        var prop = typeof(Player).GetProperty("GameplayClockContainer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                        var clock = prop?.GetValue(PlayerInstance);
-                        if (clock != null)
-                        {
-                            clock.GetType().GetMethod("Stop")?.Invoke(clock, null);
-                        }
-                    }
+                    StopGameplayClock();
 
                     blackoutBox.Alpha = 1;
                     isResuming = false;
@@ -834,14 +900,9 @@ namespace osu.Game.Rulesets.Osu.Mods
                     {
                         blackoutBox.Alpha = 0;
                         
-                        if (PlayerInstance != null)
+                        if (!IsBsodRunning)
                         {
-                            var prop = typeof(Player).GetProperty("GameplayClockContainer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                            var clock = prop?.GetValue(PlayerInstance);
-                            if (clock != null)
-                            {
-                                clock.GetType().GetMethod("Start")?.Invoke(clock, null);
-                            }
+                            StartGameplayClock();
                         }
 
                         resumeTimer.Stop();
