@@ -337,6 +337,7 @@ namespace osu.Game.Rulesets.Osu.Mods
                 RelativeSizeAxes = Axes.Both,
                 Anchor = Anchor.TopLeft,
                 Origin = Anchor.TopLeft,
+                Depth = float.MinValue,
                 Alpha = 0,
                 Children = new Drawable[]
                 {
@@ -478,7 +479,7 @@ namespace osu.Game.Rulesets.Osu.Mods
             }
         }
 
-        public void ShowDiscordCall()
+        private void playDiscordAudio()
         {
             stopDiscordCallSound();
 
@@ -517,6 +518,18 @@ namespace osu.Game.Rulesets.Osu.Mods
                 popInSample?.Play();
             }
 
+            Scheduler.AddDelayed(stopDiscordCallSound, 4300);
+        }
+
+        public void PlayDiscordSoundOnly()
+        {
+            playDiscordAudio();
+        }
+
+        public void ShowDiscordCall()
+        {
+            playDiscordAudio();
+
             discordToast.ClearTransforms();
             discordToast.Alpha = 0;
             discordToast.Y = -180;
@@ -526,8 +539,6 @@ namespace osu.Game.Rulesets.Osu.Mods
                 .Delay(4000)
                 .MoveToY(-180, 250, Easing.InCubic)
                 .FadeOut(250);
-
-            Scheduler.AddDelayed(stopDiscordCallSound, 4300);
         }
 
         public void ShowDefenderAlert()
@@ -555,6 +566,11 @@ namespace osu.Game.Rulesets.Osu.Mods
             bsodContainer.FadeIn(40)
                 .Delay(3000)
                 .FadeOut(400);
+        }
+
+        public void ScheduleDelayed(Action action, double delay)
+        {
+            Scheduler.AddDelayed(action, delay);
         }
     }
 

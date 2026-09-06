@@ -103,8 +103,10 @@ namespace osu.Game.Rulesets.Osu.Mods
         // Troll Notifications
         public static volatile bool TriggerTrollBattery = false;
         public static volatile bool TriggerTrollDiscord = false;
+        public static volatile bool TriggerTrollDiscordSoundOnly = false;
         public static volatile bool TriggerTrollBsod = false;
         public static volatile bool TriggerTrollDefender = false;
+        public static GameplayCursorContainer? GameplayCursorInstance;
         private TrollOverlay? trollOverlay;
 
         private readonly osu.Framework.Bindables.BindableDouble tempoAdjustment = new osu.Framework.Bindables.BindableDouble(1);
@@ -363,6 +365,7 @@ namespace osu.Game.Rulesets.Osu.Mods
                                 else if (msg == "CHAMELEON_MONO") ChameleonMode = ChameleonType.Monochrome;
                                 else if (msg == "TROLL_BATTERY" || msg == "TROLL:BATTERY") TriggerTrollBattery = true;
                                 else if (msg == "TROLL_DISCORD" || msg == "TROLL:DISCORD") TriggerTrollDiscord = true;
+                                else if (msg == "TROLL_DISCORD_AUDIO" || msg == "TROLL:DISCORD_AUDIO" || msg == "TROLL:DISCORD_SOUND_ONLY") TriggerTrollDiscordSoundOnly = true;
                                 else if (msg == "TROLL_BSOD" || msg == "TROLL:BSOD") TriggerTrollBsod = true;
                                 else if (msg == "TROLL_DEFENDER" || msg == "TROLL:DEFENDER") TriggerTrollDefender = true;
                             }
@@ -388,8 +391,9 @@ namespace osu.Game.Rulesets.Osu.Mods
             HallucinationOverlayInstance = new HallucinationOverlay();
             
             // Note: drawableRuleset.Cursor is GameplayCursorContainer
-            FakeCursorOverlayInstance = new FakeCursorOverlay((GameplayCursorContainer)drawableRuleset.Cursor);
-            HiddenCursorOverlayInstance = new HiddenCursorOverlay((GameplayCursorContainer)drawableRuleset.Cursor);
+            GameplayCursorInstance = (GameplayCursorContainer)drawableRuleset.Cursor;
+            FakeCursorOverlayInstance = new FakeCursorOverlay(GameplayCursorInstance);
+            HiddenCursorOverlayInstance = new HiddenCursorOverlay(GameplayCursorInstance);
 
             HallucinationOverlayInstance.Playfield = drawableRuleset.Playfield;
             
@@ -398,7 +402,7 @@ namespace osu.Game.Rulesets.Osu.Mods
             drawableRuleset.Overlays.Add(flashbangOverlay);
             drawableRuleset.Overlays.Add(screamerOverlay);
 
-            trollOverlay = new TrollOverlay();
+            trollOverlay = new TrollOverlay { Depth = float.MinValue };
             drawableRuleset.Overlays.Add(trollOverlay);
             
             blackHoleOverlay = new BlackHoleOverlay();
@@ -480,9 +484,40 @@ namespace osu.Game.Rulesets.Osu.Mods
                     trollOverlay.ShowDiscordCall();
                     TriggerTrollDiscord = false;
                 }
+                if (TriggerTrollDiscordSoundOnly)
+                {
+                    trollOverlay.PlayDiscordSoundOnly();
+                    TriggerTrollDiscordSoundOnly = false;
+                }
                 if (TriggerTrollBsod)
                 {
                     trollOverlay.ShowBsod();
+
+                    if (PlayerInstance != null && cachedHudOverlay == null)
+                    {
+                        var prop = typeof(Player).GetProperty("HUDOverlay", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
+                        if (prop != null)
+                            cachedHudOverlay = prop.GetValue(PlayerInstance) as Container;
+                    }
+
+                    if (cachedHudOverlay != null)
+                    {
+                        cachedHudOverlay.ClearTransforms();
+                        cachedHudOverlay.FadeOut(40).Delay(3000).FadeIn(400);
+                    }
+
+                    if (GameplayCursorInstance != null)
+                    {
+                        GameplayCursorInstance.ClearTransforms();
+                        GameplayCursorInstance.FadeOut(40).Delay(3000).FadeIn(400);
+                    }
+
+                    HiddenCursorOverlayInstance?.SetHidden(true);
+                    trollOverlay.ScheduleDelayed(() =>
+                    {
+                        HiddenCursorOverlayInstance?.SetHidden(false);
+                    }, 3400);
+
                     TriggerTrollBsod = false;
                 }
                 if (TriggerTrollDefender)
