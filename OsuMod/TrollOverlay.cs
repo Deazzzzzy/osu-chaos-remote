@@ -1,9 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using osu.Framework.Allocation;
-using osu.Framework.Audio.Sample;
+using osu.Framework.Audio.Track;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shapes;
@@ -20,7 +21,7 @@ namespace osu.Game.Rulesets.Osu.Mods
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool MessageBeep(uint uType);
 
-        [DllImport("winmm.dll", EntryPoint = "mciSendStringA", CharSet = CharSet.Ansi)]
+        [DllImport("winmm.dll", EntryPoint = "mciSendStringW", CharSet = CharSet.Unicode)]
         private static extern int mciSendString(string command, StringBuilder? buffer, int bufferSize, IntPtr hwndCallback);
 
         private const uint mb_iconhand = 0x00000010;
@@ -34,8 +35,8 @@ namespace osu.Game.Rulesets.Osu.Mods
 
         private osu.Framework.Audio.Sample.Sample? popInSample;
         private osu.Framework.Audio.Sample.Sample? combobreakSample;
-        private Sample? discordCallSample;
-        private SampleChannel? discordCallChannel;
+        private ITrack? discordTrack;
+        private static string? localAudioPath;
 
         public TrollOverlay()
         {
@@ -51,10 +52,36 @@ namespace osu.Game.Rulesets.Osu.Mods
 
             try
             {
-                var dllStore = new DllResourceStore(typeof(TrollOverlay).Assembly);
-                var customStore = audio.GetSampleStore(dllStore);
-                customStore.AddExtension("mp3");
-                discordCallSample = customStore.Get("call_calling");
+                byte[]? audioBytes = null;
+                var asm = typeof(TrollOverlay).Assembly;
+                using (var stream = asm.GetManifestResourceStream("call_calling.mp3"))
+                {
+                    if (stream != null)
+                    {
+                        audioBytes = new byte[stream.Length];
+                        stream.ReadExactly(audioBytes, 0, audioBytes.Length);
+                    }
+                }
+
+                string diskPath = @"C:\Users\dizzy\Downloads\Osu_Debuffs\osu\osu.Game.Rulesets.Osu\Mods\call_calling.mp3";
+                if (audioBytes == null && File.Exists(diskPath))
+                {
+                    audioBytes = File.ReadAllBytes(diskPath);
+                }
+
+                if (audioBytes != null)
+                {
+                    localAudioPath = Path.Combine(Path.GetTempPath(), "osu_discord_call.mp3");
+                    File.WriteAllBytes(localAudioPath, audioBytes);
+
+                    var store = new SingleFileResourceStore("call_calling.mp3", audioBytes);
+                    var trackStore = audio.GetTrackStore(store);
+                    discordTrack = trackStore.Get("call_calling.mp3");
+                    if (discordTrack != null)
+                    {
+                        discordTrack.Looping = true;
+                    }
+                }
             }
             catch { }
 
@@ -438,13 +465,14 @@ namespace osu.Game.Rulesets.Osu.Mods
 
         private void stopDiscordCallSound()
         {
-            discordCallChannel?.Stop();
+            discordTrack?.Stop();
+
             if (OperatingSystem.IsWindows())
             {
                 try
                 {
-                    mciSendString("stop discord_ring", null, 0, IntPtr.Zero);
-                    mciSendString("close discord_ring", null, 0, IntPtr.Zero);
+                    mciSendString("stop disc_ring", null, 0, IntPtr.Zero);
+                    mciSendString("close disc_ring", null, 0, IntPtr.Zero);
                 }
                 catch { }
             }
@@ -456,42 +484,28 @@ namespace osu.Game.Rulesets.Osu.Mods
 
             bool played = false;
 
-            if (discordCallSample != null)
+            if (discordTrack != null)
             {
                 try
                 {
-                    discordCallChannel = discordCallSample.GetChannel();
-                    if (discordCallChannel != null)
-                    {
-                        discordCallChannel.Looping = true;
-                        discordCallChannel.Play();
-                        played = true;
-                    }
+                    discordTrack.Seek(0);
+                    discordTrack.Start();
+                    played = true;
                 }
                 catch { }
             }
 
-            if (!played && OperatingSystem.IsWindows())
+            if (OperatingSystem.IsWindows())
             {
                 try
                 {
-                    string[] possiblePaths = new[]
+                    string target = localAudioPath ?? @"C:\Users\dizzy\Downloads\Osu_Debuffs\osu\osu.Game.Rulesets.Osu\Mods\call_calling.mp3";
+                    if (File.Exists(target))
                     {
-                        Path.Combine(AppContext.BaseDirectory, "call_calling.mp3"),
-                        Path.Combine(AppContext.BaseDirectory, "Mods", "call_calling.mp3"),
-                        @"C:\Users\dizzy\Downloads\Osu_Debuffs\osu\osu.Game.Rulesets.Osu\Mods\call_calling.mp3"
-                    };
-
-                    foreach (var p in possiblePaths)
-                    {
-                        if (File.Exists(p))
-                        {
-                            mciSendString("close discord_ring", null, 0, IntPtr.Zero);
-                            mciSendString($"open \"{p}\" type mpegvideo alias discord_ring", null, 0, IntPtr.Zero);
-                            mciSendString("play discord_ring repeat", null, 0, IntPtr.Zero);
-                            played = true;
-                            break;
-                        }
+                        mciSendString("close disc_ring", null, 0, IntPtr.Zero);
+                        mciSendString($"open \"{target}\" type mpegvideo alias disc_ring", null, 0, IntPtr.Zero);
+                        mciSendString("play disc_ring", null, 0, IntPtr.Zero);
+                        played = true;
                     }
                 }
                 catch { }
@@ -542,5 +556,23 @@ namespace osu.Game.Rulesets.Osu.Mods
                 .Delay(3000)
                 .FadeOut(400);
         }
+    }
+
+    public class SingleFileResourceStore : IResourceStore<byte[]>
+    {
+        private readonly string name;
+        private readonly byte[] data;
+
+        public SingleFileResourceStore(string name, byte[] data)
+        {
+            this.name = name;
+            this.data = data;
+        }
+
+        public byte[]? Get(string lookup) => data;
+        public System.Threading.Tasks.Task<byte[]?> GetAsync(string lookup, System.Threading.CancellationToken ct = default) => System.Threading.Tasks.Task.FromResult<byte[]?>(data);
+        public Stream? GetStream(string lookup) => new MemoryStream(data);
+        public IEnumerable<string> GetAvailableResources() => new[] { name };
+        public void Dispose() { }
     }
 }
