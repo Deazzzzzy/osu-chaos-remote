@@ -1,10 +1,14 @@
 using System;
+using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using osu.Framework.Allocation;
+using osu.Framework.Audio.Sample;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
+using osu.Framework.IO.Stores;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Sprites;
 using osuTK;
@@ -15,6 +19,9 @@ namespace osu.Game.Rulesets.Osu.Mods
     {
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool MessageBeep(uint uType);
+
+        [DllImport("winmm.dll", EntryPoint = "mciSendStringA", CharSet = CharSet.Ansi)]
+        private static extern int mciSendString(string command, StringBuilder? buffer, int bufferSize, IntPtr hwndCallback);
 
         private const uint mb_iconhand = 0x00000010;
         private const uint mb_iconexclamation = 0x00000030;
@@ -27,6 +34,8 @@ namespace osu.Game.Rulesets.Osu.Mods
 
         private osu.Framework.Audio.Sample.Sample? popInSample;
         private osu.Framework.Audio.Sample.Sample? combobreakSample;
+        private Sample? discordCallSample;
+        private SampleChannel? discordCallChannel;
 
         public TrollOverlay()
         {
@@ -39,6 +48,15 @@ namespace osu.Game.Rulesets.Osu.Mods
         {
             popInSample = audio.Samples.Get("UI/overlay-pop-in");
             combobreakSample = audio.Samples.Get("Gameplay/combobreak");
+
+            try
+            {
+                var dllStore = new DllResourceStore(typeof(TrollOverlay).Assembly);
+                var customStore = audio.GetSampleStore(dllStore);
+                customStore.AddExtension("mp3");
+                discordCallSample = customStore.Get("call_calling");
+            }
+            catch { }
 
             InternalChildren = new Drawable[]
             {
@@ -418,10 +436,72 @@ namespace osu.Game.Rulesets.Osu.Mods
                 .FadeOut(250);
         }
 
+        private void stopDiscordCallSound()
+        {
+            discordCallChannel?.Stop();
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    mciSendString("stop discord_ring", null, 0, IntPtr.Zero);
+                    mciSendString("close discord_ring", null, 0, IntPtr.Zero);
+                }
+                catch { }
+            }
+        }
+
         public void ShowDiscordCall()
         {
-            playSystemSound(mb_iconasterisk);
-            popInSample?.Play();
+            stopDiscordCallSound();
+
+            bool played = false;
+
+            if (discordCallSample != null)
+            {
+                try
+                {
+                    discordCallChannel = discordCallSample.GetChannel();
+                    if (discordCallChannel != null)
+                    {
+                        discordCallChannel.Looping = true;
+                        discordCallChannel.Play();
+                        played = true;
+                    }
+                }
+                catch { }
+            }
+
+            if (!played && OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    string[] possiblePaths = new[]
+                    {
+                        Path.Combine(AppContext.BaseDirectory, "call_calling.mp3"),
+                        Path.Combine(AppContext.BaseDirectory, "Mods", "call_calling.mp3"),
+                        @"C:\Users\dizzy\Downloads\Osu_Debuffs\osu\osu.Game.Rulesets.Osu\Mods\call_calling.mp3"
+                    };
+
+                    foreach (var p in possiblePaths)
+                    {
+                        if (File.Exists(p))
+                        {
+                            mciSendString("close discord_ring", null, 0, IntPtr.Zero);
+                            mciSendString($"open \"{p}\" type mpegvideo alias discord_ring", null, 0, IntPtr.Zero);
+                            mciSendString("play discord_ring repeat", null, 0, IntPtr.Zero);
+                            played = true;
+                            break;
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            if (!played)
+            {
+                playSystemSound(mb_iconasterisk);
+                popInSample?.Play();
+            }
 
             discordToast.ClearTransforms();
             discordToast.Alpha = 0;
@@ -432,6 +512,8 @@ namespace osu.Game.Rulesets.Osu.Mods
                 .Delay(4000)
                 .MoveToY(-180, 250, Easing.InCubic)
                 .FadeOut(250);
+
+            Scheduler.AddDelayed(stopDiscordCallSound, 4300);
         }
 
         public void ShowDefenderAlert()
