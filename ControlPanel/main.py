@@ -1078,6 +1078,22 @@ class ModernControlPanel:
             self.troll_header.config(text="ТРОЛЛИНГ: ВОДЯНОЙ ЗНАК WINDOWS 🪟", fg=self.accent_on)
         elif command == "WATERMARK_OFF":
             self.troll_header.config(text="7. СИСТЕМНЫЙ ТРОЛЛИНГ & ОБМАНКИ 🪟", fg=self.text_color)
+        elif command in ("TROLL:KNOCK", "TROLL_KNOCK"):
+            self.troll_header.config(text="ТРОЛЛИНГ: 3D СТУК В ДВЕРЬ 🚪", fg="#fab387")
+        elif command in ("TROLL:MOSQUITO:1", "MOSQUITO_1"):
+            self.troll_header.config(text="ТРОЛЛИНГ: КОМАР (ЗВУК 1) 🦟", fg="#a6e3a1")
+        elif command in ("TROLL:MOSQUITO:2", "MOSQUITO_2"):
+            self.troll_header.config(text="ТРОЛЛИНГ: КОМАР (ЗВУК 2) 🦟", fg="#f9e2af")
+        elif command in ("TROLL:MOSQUITO:3", "MOSQUITO_3"):
+            self.troll_header.config(text="ТРОЛЛИНГ: КОМАР (ЗВУК 3) 🦟", fg="#fab387")
+        elif command in ("TROLL:MOSQUITO:STOP", "MOSQUITO_STOP"):
+            self.troll_header.config(text="ТРОЛЛИНГ: КОМАР ОСТАНОВЛЕН ⏹️", fg=self.accent_off)
+        elif command in ("TROLL:GPU_CRASH", "TROLL_GPU_CRASH"):
+            self.troll_header.config(text="ТРОЛЛИНГ: СБОЙ ВИДЕОДРАЙВЕРА 🔌", fg="#76b900")
+        elif command == "FLY_ON":
+            self.troll_header.config(text="ТРОЛЛИНГ: МУХА НА МОНИТОРЕ 🪰", fg=self.accent_on)
+        elif command == "FLY_OFF":
+            self.troll_header.config(text="7. СИСТЕМНЫЙ ТРОЛЛИНГ & ОБМАНКИ 🪟", fg=self.text_color)
         elif command == "BUSY_CURSOR_ON":
             self.busy_cursor_header.config(text="КОЛЁСИКО ЗАГРУЗКИ (ВКЛЮЧЕНО 🟢)", fg=self.accent_on)
         elif command == "BUSY_CURSOR_OFF":

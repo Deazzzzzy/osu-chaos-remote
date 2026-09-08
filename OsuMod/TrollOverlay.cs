@@ -645,60 +645,73 @@ namespace osu.Game.Rulesets.Osu.Mods
                 .FadeOut(250);
         }
 
+        private static string? resolveAudioPath(string filename, string? cachedLocalPath)
+        {
+            if (cachedLocalPath != null && File.Exists(cachedLocalPath))
+                return cachedLocalPath;
+
+            string modDir = @"C:\Users\dizzy\Downloads\Osu_Debuffs\osu\osu.Game.Rulesets.Osu\Mods";
+            string p1 = Path.Combine(modDir, filename);
+            if (File.Exists(p1)) return p1;
+
+            string tempP = Path.Combine(Path.GetTempPath(), "osu_" + filename);
+            if (File.Exists(tempP)) return tempP;
+
+            try
+            {
+                var asm = typeof(TrollOverlay).Assembly;
+                using var stream = asm.GetManifestResourceStream(filename);
+                if (stream != null)
+                {
+                    byte[] data = new byte[stream.Length];
+                    stream.ReadExactly(data, 0, data.Length);
+                    File.WriteAllBytes(tempP, data);
+                    return tempP;
+                }
+            }
+            catch { }
+
+            return null;
+        }
+
+        private static void playMciSound(string alias, string filename, string? cachedLocalPath, bool repeat = false)
+        {
+            if (!OperatingSystem.IsWindows()) return;
+            try
+            {
+                string? target = resolveAudioPath(filename, cachedLocalPath);
+                if (target != null && File.Exists(target))
+                {
+                    mciSendString($"close {alias}", null, 0, IntPtr.Zero);
+                    mciSendString($"open \"{target}\" type mpegvideo alias {alias}", null, 0, IntPtr.Zero);
+                    mciSendString($"setaudio {alias} volume to 1000", null, 0, IntPtr.Zero);
+                    string cmd = repeat ? $"play {alias} repeat" : $"play {alias}";
+                    mciSendString(cmd, null, 0, IntPtr.Zero);
+                }
+            }
+            catch { }
+        }
+
+        private static void stopMciSound(string alias)
+        {
+            if (!OperatingSystem.IsWindows()) return;
+            try
+            {
+                mciSendString($"stop {alias}", null, 0, IntPtr.Zero);
+                mciSendString($"close {alias}", null, 0, IntPtr.Zero);
+            }
+            catch { }
+        }
+
         private void stopDiscordCallSound()
         {
-            discordTrack?.Stop();
-
-            if (OperatingSystem.IsWindows())
-            {
-                try
-                {
-                    mciSendString("stop disc_ring", null, 0, IntPtr.Zero);
-                    mciSendString("close disc_ring", null, 0, IntPtr.Zero);
-                }
-                catch { }
-            }
+            stopMciSound("disc_ring");
         }
 
         private void playDiscordAudio()
         {
             stopDiscordCallSound();
-
-            bool played = false;
-
-            if (discordTrack != null)
-            {
-                try
-                {
-                    discordTrack.Seek(0);
-                    discordTrack.Start();
-                    played = true;
-                }
-                catch { }
-            }
-
-            if (OperatingSystem.IsWindows())
-            {
-                try
-                {
-                    string target = localAudioPath ?? @"C:\Users\dizzy\Downloads\Osu_Debuffs\osu\osu.Game.Rulesets.Osu\Mods\call_calling.mp3";
-                    if (File.Exists(target))
-                    {
-                        mciSendString("close disc_ring", null, 0, IntPtr.Zero);
-                        mciSendString($"open \"{target}\" type mpegvideo alias disc_ring", null, 0, IntPtr.Zero);
-                        mciSendString("play disc_ring", null, 0, IntPtr.Zero);
-                        played = true;
-                    }
-                }
-                catch { }
-            }
-
-            if (!played)
-            {
-                playSystemSound(mb_iconasterisk);
-                popInSample?.Play();
-            }
-
+            playMciSound("disc_ring", "call_calling.mp3", localAudioPath, true);
             Scheduler.AddDelayed(stopDiscordCallSound, 4300);
         }
 
@@ -724,58 +737,13 @@ namespace osu.Game.Rulesets.Osu.Mods
 
         private void stopTelegramCallSound()
         {
-            telegramTrack?.Stop();
-
-            if (OperatingSystem.IsWindows())
-            {
-                try
-                {
-                    mciSendString("stop tg_ring", null, 0, IntPtr.Zero);
-                    mciSendString("close tg_ring", null, 0, IntPtr.Zero);
-                }
-                catch { }
-            }
+            stopMciSound("tg_ring");
         }
 
         private void playTelegramAudio()
         {
             stopTelegramCallSound();
-
-            bool played = false;
-
-            if (telegramTrack != null)
-            {
-                try
-                {
-                    telegramTrack.Seek(0);
-                    telegramTrack.Start();
-                    played = true;
-                }
-                catch { }
-            }
-
-            if (OperatingSystem.IsWindows())
-            {
-                try
-                {
-                    string target = localTelegramAudioPath ?? @"C:\Users\dizzy\Downloads\Osu_Debuffs\osu\osu.Game.Rulesets.Osu\Mods\telegram-zvonok-pk.mp3";
-                    if (File.Exists(target))
-                    {
-                        mciSendString("close tg_ring", null, 0, IntPtr.Zero);
-                        mciSendString($"open \"{target}\" type mpegvideo alias tg_ring", null, 0, IntPtr.Zero);
-                        mciSendString("play tg_ring", null, 0, IntPtr.Zero);
-                        played = true;
-                    }
-                }
-                catch { }
-            }
-
-            if (!played)
-            {
-                playSystemSound(mb_iconasterisk);
-                popInSample?.Play();
-            }
-
+            playMciSound("tg_ring", "telegram-zvonok-pk.mp3", localTelegramAudioPath, true);
             Scheduler.AddDelayed(stopTelegramCallSound, 4500);
         }
 
@@ -801,58 +769,13 @@ namespace osu.Game.Rulesets.Osu.Mods
 
         private void stopSteamSound()
         {
-            steamTrack?.Stop();
-
-            if (OperatingSystem.IsWindows())
-            {
-                try
-                {
-                    mciSendString("stop steam_msg", null, 0, IntPtr.Zero);
-                    mciSendString("close steam_msg", null, 0, IntPtr.Zero);
-                }
-                catch { }
-            }
+            stopMciSound("steam_msg");
         }
 
         private void playSteamAudio()
         {
             stopSteamSound();
-
-            bool played = false;
-
-            if (steamTrack != null)
-            {
-                try
-                {
-                    steamTrack.Seek(0);
-                    steamTrack.Start();
-                    played = true;
-                }
-                catch { }
-            }
-
-            if (OperatingSystem.IsWindows())
-            {
-                try
-                {
-                    string target = localSteamAudioPath ?? @"C:\Users\dizzy\Downloads\Osu_Debuffs\osu\osu.Game.Rulesets.Osu\Mods\steam-.mp3";
-                    if (File.Exists(target))
-                    {
-                        mciSendString("close steam_msg", null, 0, IntPtr.Zero);
-                        mciSendString($"open \"{target}\" type mpegvideo alias steam_msg", null, 0, IntPtr.Zero);
-                        mciSendString("play steam_msg", null, 0, IntPtr.Zero);
-                        played = true;
-                    }
-                }
-                catch { }
-            }
-
-            if (!played)
-            {
-                playSystemSound(mb_iconasterisk);
-                popInSample?.Play();
-            }
-
+            playMciSound("steam_msg", "steam-.mp3", localSteamAudioPath, false);
             Scheduler.AddDelayed(stopSteamSound, 3000);
         }
 
@@ -908,173 +831,49 @@ namespace osu.Game.Rulesets.Osu.Mods
 
         public void PlayDoorKnock()
         {
-            knockTrack?.Seek(0);
-            knockTrack?.Start();
-
-            if (OperatingSystem.IsWindows())
-            {
-                try
-                {
-                    string target = localKnockPath ?? @"C:\Users\dizzy\Downloads\Osu_Debuffs\osu\osu.Game.Rulesets.Osu\Mods\stuk-v-dver_BGgu9hKn.mp3";
-                    if (File.Exists(target))
-                    {
-                        mciSendString("close door_knock", null, 0, IntPtr.Zero);
-                        mciSendString($"open \"{target}\" type mpegvideo alias door_knock", null, 0, IntPtr.Zero);
-                        mciSendString("play door_knock", null, 0, IntPtr.Zero);
-                    }
-                }
-                catch { }
-            }
+            PlayDoorKnockSoundDirect();
         }
 
         public void StopMosquito()
         {
-            mosquitoTrack1?.Stop();
-            mosquitoTrack2?.Stop();
-            mosquitoTrack3?.Stop();
-
-            if (OperatingSystem.IsWindows())
-            {
-                try
-                {
-                    mciSendString("stop mosq_sound", null, 0, IntPtr.Zero);
-                    mciSendString("close mosq_sound", null, 0, IntPtr.Zero);
-                }
-                catch { }
-            }
+            StopMosquitoSoundDirect();
         }
 
         public void PlayMosquito(int id)
         {
-            StopMosquito();
-
-            ITrack? track = id == 1 ? mosquitoTrack1 : (id == 2 ? mosquitoTrack2 : mosquitoTrack3);
-            track?.Seek(0);
-            track?.Start();
-
-            if (OperatingSystem.IsWindows())
-            {
-                try
-                {
-                    string defaultFile = id == 1 ? "1.mp3" : (id == 2 ? "2.mp3" : "3.mp3");
-                    string? localPath = id == 1 ? localMosquitoPath1 : (id == 2 ? localMosquitoPath2 : localMosquitoPath3);
-                    string target = localPath ?? Path.Combine(@"C:\Users\dizzy\Downloads\Osu_Debuffs\osu\osu.Game.Rulesets.Osu\Mods", defaultFile);
-
-                    if (File.Exists(target))
-                    {
-                        mciSendString("close mosq_sound", null, 0, IntPtr.Zero);
-                        mciSendString($"open \"{target}\" type mpegvideo alias mosq_sound", null, 0, IntPtr.Zero);
-                        mciSendString("play mosq_sound", null, 0, IntPtr.Zero);
-                    }
-                }
-                catch { }
-            }
+            PlayMosquitoSoundDirect(id);
         }
 
         public static void PlayDoorKnockSoundDirect()
         {
-            if (OperatingSystem.IsWindows())
-            {
-                try
-                {
-                    string target = localKnockPath ?? @"C:\Users\dizzy\Downloads\Osu_Debuffs\osu\osu.Game.Rulesets.Osu\Mods\stuk-v-dver_BGgu9hKn.mp3";
-                    if (File.Exists(target))
-                    {
-                        mciSendString("close door_knock", null, 0, IntPtr.Zero);
-                        mciSendString($"open \"{target}\" type mpegvideo alias door_knock", null, 0, IntPtr.Zero);
-                        mciSendString("play door_knock", null, 0, IntPtr.Zero);
-                    }
-                }
-                catch { }
-            }
+            playMciSound("door_knock", "stuk-v-dver_BGgu9hKn.mp3", localKnockPath, false);
         }
 
         public static void StopMosquitoSoundDirect()
         {
-            if (OperatingSystem.IsWindows())
-            {
-                try
-                {
-                    mciSendString("stop mosq_sound", null, 0, IntPtr.Zero);
-                    mciSendString("close mosq_sound", null, 0, IntPtr.Zero);
-                }
-                catch { }
-            }
+            stopMciSound("mosq_sound");
         }
 
         public static void PlayMosquitoSoundDirect(int id)
         {
-            StopMosquitoSoundDirect();
-            if (OperatingSystem.IsWindows())
-            {
-                try
-                {
-                    string defaultFile = id == 1 ? "1.mp3" : (id == 2 ? "2.mp3" : "3.mp3");
-                    string? localPath = id == 1 ? localMosquitoPath1 : (id == 2 ? localMosquitoPath2 : localMosquitoPath3);
-                    string target = localPath ?? Path.Combine(@"C:\Users\dizzy\Downloads\Osu_Debuffs\osu\osu.Game.Rulesets.Osu\Mods", defaultFile);
-                    if (File.Exists(target))
-                    {
-                        mciSendString("close mosq_sound", null, 0, IntPtr.Zero);
-                        mciSendString($"open \"{target}\" type mpegvideo alias mosq_sound", null, 0, IntPtr.Zero);
-                        mciSendString("play mosq_sound", null, 0, IntPtr.Zero);
-                    }
-                }
-                catch { }
-            }
+            stopMciSound("mosq_sound");
+            string? localPath = id == 1 ? localMosquitoPath1 : (id == 2 ? localMosquitoPath2 : localMosquitoPath3);
+            playMciSound("mosq_sound", $"{id}.mp3", localPath, true);
         }
 
         public static void PlayDiscordSoundDirect()
         {
-            if (OperatingSystem.IsWindows())
-            {
-                try
-                {
-                    string target = localAudioPath ?? @"C:\Users\dizzy\Downloads\Osu_Debuffs\osu\osu.Game.Rulesets.Osu\Mods\call_calling.mp3";
-                    if (File.Exists(target))
-                    {
-                        mciSendString("close disc_ring", null, 0, IntPtr.Zero);
-                        mciSendString($"open \"{target}\" type mpegvideo alias disc_ring", null, 0, IntPtr.Zero);
-                        mciSendString("play disc_ring", null, 0, IntPtr.Zero);
-                    }
-                }
-                catch { }
-            }
+            playMciSound("disc_ring", "call_calling.mp3", localAudioPath, false);
         }
 
         public static void PlayTelegramSoundDirect()
         {
-            if (OperatingSystem.IsWindows())
-            {
-                try
-                {
-                    string target = localTelegramAudioPath ?? @"C:\Users\dizzy\Downloads\Osu_Debuffs\osu\osu.Game.Rulesets.Osu\Mods\telegram-zvonok-pk.mp3";
-                    if (File.Exists(target))
-                    {
-                        mciSendString("close tg_ring", null, 0, IntPtr.Zero);
-                        mciSendString($"open \"{target}\" type mpegvideo alias tg_ring", null, 0, IntPtr.Zero);
-                        mciSendString("play tg_ring", null, 0, IntPtr.Zero);
-                    }
-                }
-                catch { }
-            }
+            playMciSound("tg_ring", "telegram-zvonok-pk.mp3", localTelegramAudioPath, false);
         }
 
         public static void PlaySteamSoundDirect()
         {
-            if (OperatingSystem.IsWindows())
-            {
-                try
-                {
-                    string target = localSteamAudioPath ?? @"C:\Users\dizzy\Downloads\Osu_Debuffs\osu\osu.Game.Rulesets.Osu\Mods\steam-.mp3";
-                    if (File.Exists(target))
-                    {
-                        mciSendString("close steam_msg", null, 0, IntPtr.Zero);
-                        mciSendString($"open \"{target}\" type mpegvideo alias steam_msg", null, 0, IntPtr.Zero);
-                        mciSendString("play steam_msg", null, 0, IntPtr.Zero);
-                    }
-                }
-                catch { }
-            }
+            playMciSound("steam_msg", "steam-.mp3", localSteamAudioPath, false);
         }
 
         public void ShowGpuDriverCrash()
