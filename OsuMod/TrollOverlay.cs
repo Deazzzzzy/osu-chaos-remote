@@ -10,6 +10,7 @@ using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.IO.Stores;
+using osu.Game.Audio.Effects;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Sprites;
 using osuTK;
@@ -24,6 +25,11 @@ namespace osu.Game.Rulesets.Osu.Mods
         [DllImport("winmm.dll", EntryPoint = "mciSendStringW", CharSet = CharSet.Unicode)]
         private static extern int mciSendString(string command, StringBuilder? buffer, int bufferSize, IntPtr hwndCallback);
 
+        [DllImport("winmm.dll", EntryPoint = "PlaySoundW", CharSet = CharSet.Unicode)]
+        public static extern bool PlaySound(string pszSound, IntPtr hmod, uint fdwSound);
+        public const uint SND_ASYNC = 0x0001;
+        public const uint SND_FILENAME = 0x00020000;
+
         private const uint mb_iconhand = 0x00000010;
         private const uint mb_iconexclamation = 0x00000030;
         private const uint mb_iconasterisk = 0x00000040;
@@ -32,6 +38,14 @@ namespace osu.Game.Rulesets.Osu.Mods
         private Container discordToast = null!;
         private Container bsodContainer = null!;
         private Container defenderToast = null!;
+        private Container updateContainer = null!;
+        private Container donationToast = null!;
+        private Container stickyKeysDialog = null!;
+        private Container glitchContainer = null!;
+        private readonly List<Box> glitchSlices = new List<Box>();
+        private osu.Game.Audio.Effects.AudioFilter? lowPassFilter;
+        private SpriteIcon? updateSpinnerIcon;
+        private readonly Random rnd = new Random();
 
         private osu.Framework.Audio.Sample.Sample? popInSample;
         private osu.Framework.Audio.Sample.Sample? combobreakSample;
@@ -85,13 +99,35 @@ namespace osu.Game.Rulesets.Osu.Mods
             }
             catch { }
 
-            InternalChildren = new Drawable[]
+            bsodContainer = createBsodContainer();
+            updateContainer = createWindowsUpdateContainer();
+            glitchContainer = createGlitchContainer();
+            defenderToast = createDefenderToast();
+            batteryToast = createBatteryToast();
+            discordToast = createDiscordToast();
+            donationToast = createDonationToast();
+            stickyKeysDialog = createStickyKeysDialog();
+
+            var children = new List<Drawable>
             {
-                bsodContainer = createBsodContainer(),
-                defenderToast = createDefenderToast(),
-                batteryToast = createBatteryToast(),
-                discordToast = createDiscordToast(),
+                bsodContainer,
+                updateContainer,
+                glitchContainer,
+                defenderToast,
+                batteryToast,
+                discordToast,
+                donationToast,
+                stickyKeysDialog,
             };
+
+            try
+            {
+                lowPassFilter = new AudioFilter(audio.TrackMixer);
+                children.Add(lowPassFilter);
+            }
+            catch { }
+
+            InternalChildren = children.ToArray();
         }
 
         private Container createBatteryToast()
@@ -556,6 +592,33 @@ namespace osu.Game.Rulesets.Osu.Mods
                 .FadeOut(250);
         }
 
+        public static void PlayWindowsSound(string filename)
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Media", filename);
+                    if (File.Exists(path))
+                    {
+                        PlaySound(path, IntPtr.Zero, SND_ASYNC | SND_FILENAME);
+                        return;
+                    }
+                }
+                catch { }
+            }
+            playSystemSound(mb_iconasterisk);
+        }
+
+        public void SetMuffled(bool muffled)
+        {
+            if (lowPassFilter == null) return;
+            if (muffled)
+                lowPassFilter.CutoffTo(380, 250, Easing.OutCubic);
+            else
+                lowPassFilter.CutoffTo(osu.Game.Audio.Effects.AudioFilter.MAX_LOWPASS_CUTOFF, 250, Easing.OutCubic);
+        }
+
         private readonly System.Diagnostics.Stopwatch bsodTimer = new System.Diagnostics.Stopwatch();
         public bool IsBsodActive { get; private set; }
         public float BsodElapsed => (float)bsodTimer.Elapsed.TotalMilliseconds;
@@ -570,6 +633,388 @@ namespace osu.Game.Rulesets.Osu.Mods
 
             bsodTimer.Restart();
             IsBsodActive = true;
+        }
+
+        private readonly System.Diagnostics.Stopwatch updateTimer = new System.Diagnostics.Stopwatch();
+        public bool IsUpdateActive { get; private set; }
+        public float UpdateElapsed => (float)updateTimer.Elapsed.TotalMilliseconds;
+
+        public void ShowWindowsUpdate()
+        {
+            PlayWindowsSound("Windows Shutdown.wav");
+
+            updateContainer.ClearTransforms();
+            updateContainer.Alpha = 1f;
+            updateSpinnerIcon?.ClearTransforms();
+            updateSpinnerIcon?.RotateTo(0).Then().RotateTo(360, 1800).Loop();
+
+            updateTimer.Restart();
+            IsUpdateActive = true;
+        }
+
+        public void ShowDonation()
+        {
+            PlayWindowsSound("chimes.wav");
+
+            donationToast.ClearTransforms();
+            donationToast.Alpha = 0;
+            donationToast.Y = -180;
+            donationToast.FadeIn(200);
+            donationToast.MoveToY(25, 350, Easing.OutBack)
+                .Delay(4000)
+                .MoveToY(-180, 300, Easing.InBack)
+                .FadeOut(300);
+        }
+
+        public void ShowStickyKeys()
+        {
+            PlayWindowsSound("Windows Exclamation.wav");
+
+            stickyKeysDialog.ClearTransforms();
+            stickyKeysDialog.Alpha = 0;
+            stickyKeysDialog.FadeIn(80)
+                .Delay(3600)
+                .FadeOut(250);
+        }
+
+        private readonly System.Diagnostics.Stopwatch glitchTimer = new System.Diagnostics.Stopwatch();
+        public bool IsGlitchActive { get; private set; }
+
+        public void ShowGlitch()
+        {
+            PlayWindowsSound("Windows Hardware Fail.wav");
+
+            glitchContainer.ClearTransforms();
+            glitchContainer.Alpha = 1f;
+
+            glitchTimer.Restart();
+            IsGlitchActive = true;
+        }
+
+        private Container createWindowsUpdateContainer()
+        {
+            return new Container
+            {
+                RelativeSizeAxes = Axes.Both,
+                Anchor = Anchor.TopLeft,
+                Origin = Anchor.TopLeft,
+                Depth = float.MinValue,
+                Alpha = 0,
+                Children = new Drawable[]
+                {
+                    new Box
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Colour = Colour4.Black
+                    },
+                    new FillFlowContainer
+                    {
+                        Anchor = Anchor.Centre,
+                        Origin = Anchor.Centre,
+                        AutoSizeAxes = Axes.Both,
+                        Direction = FillDirection.Vertical,
+                        Spacing = new Vector2(0, 16),
+                        Children = new Drawable[]
+                        {
+                            new Container
+                            {
+                                Anchor = Anchor.TopCentre,
+                                Origin = Anchor.TopCentre,
+                                Size = new Vector2(50),
+                                Child = updateSpinnerIcon = new SpriteIcon
+                                {
+                                    Anchor = Anchor.Centre,
+                                    Origin = Anchor.Centre,
+                                    Icon = FontAwesome.Solid.CircleNotch,
+                                    Size = new Vector2(46),
+                                    Colour = Colour4.White
+                                }
+                            },
+                            new OsuSpriteText
+                            {
+                                Anchor = Anchor.TopCentre,
+                                Origin = Anchor.TopCentre,
+                                Text = "Идет работа с обновлениями  67%",
+                                Font = OsuFont.GetFont(size: 26, weight: FontWeight.Light),
+                                Colour = Colour4.White
+                            },
+                            new OsuSpriteText
+                            {
+                                Anchor = Anchor.TopCentre,
+                                Origin = Anchor.TopCentre,
+                                Text = "Не выключайте компьютер. Это займет некоторое время.",
+                                Font = OsuFont.GetFont(size: 16),
+                                Colour = Colour4.FromHex("#b0b0b0")
+                            },
+                            new OsuSpriteText
+                            {
+                                Anchor = Anchor.TopCentre,
+                                Origin = Anchor.TopCentre,
+                                Text = "Ваш компьютер может перезагрузиться несколько раз",
+                                Font = OsuFont.GetFont(size: 13),
+                                Colour = Colour4.FromHex("#707070")
+                            }
+                        }
+                    }
+                }
+            };
+        }
+
+        private Container createDonationToast()
+        {
+            return new Container
+            {
+                Anchor = Anchor.TopCentre,
+                Origin = Anchor.TopCentre,
+                Position = new Vector2(0, -180),
+                Size = new Vector2(460, 115),
+                Masking = true,
+                CornerRadius = 14,
+                BorderThickness = 2,
+                BorderColour = Colour4.FromHex("#ff9800"),
+                Alpha = 0,
+                Children = new Drawable[]
+                {
+                    new Box
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Colour = Colour4.FromHex("#181824")
+                    },
+                    new Box
+                    {
+                        Anchor = Anchor.TopLeft,
+                        Origin = Anchor.TopLeft,
+                        RelativeSizeAxes = Axes.X,
+                        Height = 4,
+                        Colour = Colour4.FromHex("#ff9800")
+                    },
+                    new Container
+                    {
+                        Anchor = Anchor.CentreLeft,
+                        Origin = Anchor.CentreLeft,
+                        Position = new Vector2(18, 0),
+                        Size = new Vector2(56),
+                        Masking = true,
+                        CornerRadius = 28,
+                        Children = new Drawable[]
+                        {
+                            new Box
+                            {
+                                RelativeSizeAxes = Axes.Both,
+                                Colour = Colour4.FromHex("#ff9800").Opacity(0.2f)
+                            },
+                            new SpriteIcon
+                            {
+                                Anchor = Anchor.Centre,
+                                Origin = Anchor.Centre,
+                                Icon = FontAwesome.Solid.Coins,
+                                Size = new Vector2(28),
+                                Colour = Colour4.FromHex("#ffd700")
+                            }
+                        }
+                    },
+                    new FillFlowContainer
+                    {
+                        Anchor = Anchor.CentreLeft,
+                        Origin = Anchor.CentreLeft,
+                        Position = new Vector2(90, 0),
+                        AutoSizeAxes = Axes.Both,
+                        Direction = FillDirection.Vertical,
+                        Spacing = new Vector2(0, 4),
+                        Children = new Drawable[]
+                        {
+                            new OsuSpriteText
+                            {
+                                Text = "DONATIONALERTS",
+                                Font = OsuFont.GetFont(size: 11, weight: FontWeight.Bold),
+                                Colour = Colour4.FromHex("#ff9800")
+                            },
+                            new OsuSpriteText
+                            {
+                                Text = "Папич — 5 000 ₽",
+                                Font = OsuFont.GetFont(size: 19, weight: FontWeight.Bold),
+                                Colour = Colour4.White
+                            },
+                            new OsuSpriteText
+                            {
+                                Text = "«Удали игру и не позорься»",
+                                Font = OsuFont.GetFont(size: 14, weight: FontWeight.Medium, italics: true),
+                                Colour = Colour4.FromHex("#dddddd")
+                            }
+                        }
+                    }
+                }
+            };
+        }
+
+        private Container createStickyKeysDialog()
+        {
+            return new Container
+            {
+                Anchor = Anchor.Centre,
+                Origin = Anchor.Centre,
+                Size = new Vector2(450, 220),
+                Masking = true,
+                CornerRadius = 8,
+                BorderThickness = 1,
+                BorderColour = Colour4.FromHex("#7a7a7a"),
+                Alpha = 0,
+                Children = new Drawable[]
+                {
+                    new Box
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Colour = Colour4.FromHex("#f0f0f0")
+                    },
+                    new Container
+                    {
+                        RelativeSizeAxes = Axes.X,
+                        Height = 32,
+                        Children = new Drawable[]
+                        {
+                            new Box
+                            {
+                                RelativeSizeAxes = Axes.Both,
+                                Colour = Colour4.White
+                            },
+                            new OsuSpriteText
+                            {
+                                Anchor = Anchor.CentreLeft,
+                                Origin = Anchor.CentreLeft,
+                                Position = new Vector2(12, 0),
+                                Text = "Залипание клавиш",
+                                Font = OsuFont.GetFont(size: 13, weight: FontWeight.SemiBold),
+                                Colour = Colour4.Black
+                            },
+                            new SpriteIcon
+                            {
+                                Anchor = Anchor.CentreRight,
+                                Origin = Anchor.CentreRight,
+                                Position = new Vector2(-12, 0),
+                                Icon = FontAwesome.Solid.Times,
+                                Size = new Vector2(12),
+                                Colour = Colour4.FromHex("#666666")
+                            }
+                        }
+                    },
+                    new Container
+                    {
+                        Position = new Vector2(18, 46),
+                        Size = new Vector2(414, 115),
+                        Children = new Drawable[]
+                        {
+                            new SpriteIcon
+                            {
+                                Position = new Vector2(0, 4),
+                                Icon = FontAwesome.Solid.Keyboard,
+                                Size = new Vector2(36),
+                                Colour = Colour4.FromHex("#0078d7")
+                            },
+                            new OsuSpriteText
+                            {
+                                Position = new Vector2(50, 0),
+                                Text = "Вы хотите включить залипание клавиш?",
+                                Font = OsuFont.GetFont(size: 13, weight: FontWeight.Bold),
+                                Colour = Colour4.Black
+                            },
+                            new OsuSpriteText
+                            {
+                                Position = new Vector2(50, 24),
+                                Text = "Залипание клавиш позволяет использовать клавиши SHIFT, CTRL,\nALT или клавишу Windows, нажимая их по очереди.\n\nЧтобы отключить залипание клавиш, нажмите SHIFT пять раз.",
+                                Font = OsuFont.GetFont(size: 11),
+                                Colour = Colour4.FromHex("#333333")
+                            }
+                        }
+                    },
+                    new FillFlowContainer
+                    {
+                        Anchor = Anchor.BottomRight,
+                        Origin = Anchor.BottomRight,
+                        Position = new Vector2(-18, -14),
+                        AutoSizeAxes = Axes.Both,
+                        Direction = FillDirection.Horizontal,
+                        Spacing = new Vector2(10, 0),
+                        Children = new Drawable[]
+                        {
+                            new Container
+                            {
+                                Size = new Vector2(80, 26),
+                                Masking = true,
+                                CornerRadius = 4,
+                                Children = new Drawable[]
+                                {
+                                    new Box
+                                    {
+                                        RelativeSizeAxes = Axes.Both,
+                                        Colour = Colour4.FromHex("#0078d7")
+                                    },
+                                    new OsuSpriteText
+                                    {
+                                        Anchor = Anchor.Centre,
+                                        Origin = Anchor.Centre,
+                                        Text = "Да",
+                                        Font = OsuFont.GetFont(size: 12, weight: FontWeight.SemiBold),
+                                        Colour = Colour4.White
+                                    }
+                                }
+                            },
+                            new Container
+                            {
+                                Size = new Vector2(80, 26),
+                                Masking = true,
+                                CornerRadius = 4,
+                                BorderThickness = 1,
+                                BorderColour = Colour4.FromHex("#cccccc"),
+                                Children = new Drawable[]
+                                {
+                                    new Box
+                                    {
+                                        RelativeSizeAxes = Axes.Both,
+                                        Colour = Colour4.FromHex("#e6e6e6")
+                                    },
+                                    new OsuSpriteText
+                                    {
+                                        Anchor = Anchor.Centre,
+                                        Origin = Anchor.Centre,
+                                        Text = "Нет",
+                                        Font = OsuFont.GetFont(size: 12),
+                                        Colour = Colour4.Black
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+        }
+
+        private Container createGlitchContainer()
+        {
+            var container = new Container
+            {
+                RelativeSizeAxes = Axes.Both,
+                Anchor = Anchor.TopLeft,
+                Origin = Anchor.TopLeft,
+                Depth = float.MinValue,
+                Alpha = 0
+            };
+
+            for (int i = 0; i < 14; i++)
+            {
+                var slice = new Box
+                {
+                    RelativeSizeAxes = Axes.X,
+                    Height = 25,
+                    Colour = (i % 3 == 0) ? Colour4.FromHex("#ff0055").Opacity(0.65f)
+                           : (i % 3 == 1) ? Colour4.FromHex("#00ffee").Opacity(0.65f)
+                           : Colour4.FromHex("#55ff00").Opacity(0.5f),
+                    Y = i * 50
+                };
+                glitchSlices.Add(slice);
+                container.Add(slice);
+            }
+
+            return container;
         }
 
         protected override void Update()
@@ -597,6 +1042,52 @@ namespace osu.Game.Rulesets.Osu.Mods
                     bsodContainer.Alpha = 0f;
                     bsodTimer.Stop();
                     IsBsodActive = false;
+                }
+            }
+
+            if (IsUpdateActive)
+            {
+                float elapsed = UpdateElapsed;
+                const float holdDuration = 3500f;
+                const float fadeDuration = 400f;
+                const float totalDuration = holdDuration + fadeDuration;
+
+                if (elapsed < holdDuration)
+                {
+                    updateContainer.Alpha = 1f;
+                }
+                else if (elapsed < totalDuration)
+                {
+                    float progress = (elapsed - holdDuration) / fadeDuration;
+                    updateContainer.Alpha = 1f - progress;
+                }
+                else
+                {
+                    updateContainer.Alpha = 0f;
+                    updateTimer.Stop();
+                    IsUpdateActive = false;
+                }
+            }
+
+            if (IsGlitchActive)
+            {
+                float elapsed = (float)glitchTimer.Elapsed.TotalMilliseconds;
+                if (elapsed < 1400f)
+                {
+                    glitchContainer.Alpha = 1f;
+                    for (int i = 0; i < glitchSlices.Count; i++)
+                    {
+                        glitchSlices[i].Y = (float)rnd.NextDouble() * Math.Max(DrawHeight, 600f);
+                        glitchSlices[i].Height = (float)rnd.Next(6, 60);
+                        glitchSlices[i].X = (float)(rnd.NextDouble() * 80 - 40);
+                        glitchSlices[i].Alpha = (float)(rnd.NextDouble() * 0.7 + 0.3);
+                    }
+                }
+                else
+                {
+                    glitchContainer.Alpha = 0f;
+                    glitchTimer.Stop();
+                    IsGlitchActive = false;
                 }
             }
         }

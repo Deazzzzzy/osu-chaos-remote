@@ -21,7 +21,7 @@ using osu.Game.Rulesets.Osu.UI.Cursor;
 
 namespace osu.Game.Rulesets.Osu.Mods
 {
-    public partial class OsuModChaos : Mod, IUpdatableByPlayfield, IApplicableToDrawableRuleset<OsuHitObject>, IApplicableToPlayer, IApplicableToTrack
+    public partial class OsuModChaos : Mod, IUpdatableByPlayfield, IApplicableToDrawableRuleset<OsuHitObject>, IApplicableToPlayer, IApplicableToTrack, IApplicableToDrawableHitObject
     {
         public override string Name => "Chaos Remote";
         public override string Acronym => "CHR";
@@ -106,6 +106,32 @@ namespace osu.Game.Rulesets.Osu.Mods
         public static volatile bool TriggerTrollDiscordSoundOnly = false;
         public static volatile bool TriggerTrollBsod = false;
         public static volatile bool TriggerTrollDefender = false;
+
+        // Phase 4 Troll Notifications
+        public static volatile bool TriggerTrollUpdate = false;
+        public static volatile bool TriggerTrollDonate = false;
+        public static volatile bool TriggerTrollStickyKeys = false;
+        public static volatile bool TriggerTrollGlitch = false;
+
+        // Phase 4 Mouse & Cursor Trolling
+        public static volatile bool IsMouseDisconnected = false;
+        public static volatile bool TriggerMouseDisconnect = false;
+        public static volatile bool IsSlipperyCursor = false;
+        public static volatile float CursorJitterStrength = 0f;
+        public static volatile bool IsCircleRepulsion = false;
+
+        // Phase 4 Visual / Camera / Sliders
+        public static volatile bool IsDrunkCamera = false;
+        public static volatile bool IsScreenShake = false;
+        public static volatile bool IsTunnelVision = false;
+        public static volatile bool IsGhostSliders = false;
+
+        // Phase 4 Audio Havoc
+        public static volatile bool IsMuffledAudio = false;
+        public static volatile bool IsAudioPanSpin = false;
+        private readonly osu.Framework.Bindables.BindableDouble balanceAdjustment = new osu.Framework.Bindables.BindableDouble(0);
+
+        public static Playfield? CurrentPlayfield;
         public static GameplayCursorContainer? GameplayCursorInstance;
         private TrollOverlay? trollOverlay;
         public static volatile bool IsBsodRunning = false;
@@ -135,6 +161,32 @@ namespace osu.Game.Rulesets.Osu.Mods
                     clock.GetType().GetMethod("Start")?.Invoke(clock, null);
                 }
             }
+        }
+
+        public static Vector2 CalculateRepulsionOffset(Vector2 screenCursorPos)
+        {
+            if (CurrentPlayfield == null) return Vector2.Zero;
+
+            Vector2 totalRepulsion = Vector2.Zero;
+            const float radius = 130f;
+
+            try
+            {
+                foreach (var obj in CurrentPlayfield.HitObjectContainer.AliveObjects)
+                {
+                    Vector2 screenObjPos = obj.ToScreenSpace(obj.OriginPosition);
+                    Vector2 diff = screenCursorPos - screenObjPos;
+                    float dist = diff.Length;
+                    if (dist < radius && dist > 1f)
+                    {
+                        float force = (radius - dist) * 0.45f;
+                        totalRepulsion += Vector2.Normalize(diff) * force;
+                    }
+                }
+            }
+            catch { }
+
+            return totalRepulsion;
         }
 
         private readonly osu.Framework.Bindables.BindableDouble tempoAdjustment = new osu.Framework.Bindables.BindableDouble(1);
@@ -396,6 +448,42 @@ namespace osu.Game.Rulesets.Osu.Mods
                                 else if (msg == "TROLL_DISCORD_AUDIO" || msg == "TROLL:DISCORD_AUDIO" || msg == "TROLL:DISCORD_SOUND_ONLY") TriggerTrollDiscordSoundOnly = true;
                                 else if (msg == "TROLL_BSOD" || msg == "TROLL:BSOD") TriggerTrollBsod = true;
                                 else if (msg == "TROLL_DEFENDER" || msg == "TROLL:DEFENDER") TriggerTrollDefender = true;
+                                else if (msg == "TROLL_UPDATE" || msg == "TROLL:UPDATE") TriggerTrollUpdate = true;
+                                else if (msg == "TROLL_DONATE" || msg == "TROLL:DONATE") TriggerTrollDonate = true;
+                                else if (msg == "TROLL_STICKYKEYS" || msg == "TROLL:STICKYKEYS") TriggerTrollStickyKeys = true;
+                                else if (msg == "TROLL_GLITCH" || msg == "TROLL:GLITCH") TriggerTrollGlitch = true;
+                                else if (msg == "DEVICE_DISCONNECT" || msg == "MOUSE_DISCONNECT") TriggerMouseDisconnect = true;
+                                else if (msg == "SLIPPERY_ON") IsSlipperyCursor = true;
+                                else if (msg == "SLIPPERY_OFF") IsSlipperyCursor = false;
+                                else if (msg == "REPULSION_ON") IsCircleRepulsion = true;
+                                else if (msg == "REPULSION_OFF") IsCircleRepulsion = false;
+                                else if (msg.StartsWith("JITTER:"))
+                                {
+                                    if (float.TryParse(msg.Substring(7), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float j))
+                                        CursorJitterStrength = Math.Max(0f, j);
+                                }
+                                else if (msg == "JITTER_ON") CursorJitterStrength = 18f;
+                                else if (msg == "JITTER_OFF") CursorJitterStrength = 0f;
+                                else if (msg == "CLONES_ON")
+                                {
+                                    HallucinationOverlayInstance?.ScheduleAction(() => FakeCursorOverlayInstance?.SetMode("ARMY"));
+                                }
+                                else if (msg == "CLONES_OFF")
+                                {
+                                    HallucinationOverlayInstance?.ScheduleAction(() => FakeCursorOverlayInstance?.SetMode("OFF"));
+                                }
+                                else if (msg == "DRUNK_ON") IsDrunkCamera = true;
+                                else if (msg == "DRUNK_OFF") IsDrunkCamera = false;
+                                else if (msg == "SHAKE_ON") IsScreenShake = true;
+                                else if (msg == "SHAKE_OFF") IsScreenShake = false;
+                                else if (msg == "TUNNEL_ON") IsTunnelVision = true;
+                                else if (msg == "TUNNEL_OFF") IsTunnelVision = false;
+                                else if (msg == "GHOST_SLIDERS_ON") IsGhostSliders = true;
+                                else if (msg == "GHOST_SLIDERS_OFF") IsGhostSliders = false;
+                                else if (msg == "MUFFLED_ON") IsMuffledAudio = true;
+                                else if (msg == "MUFFLED_OFF") IsMuffledAudio = false;
+                                else if (msg == "PAN_SPIN_ON") IsAudioPanSpin = true;
+                                else if (msg == "PAN_SPIN_OFF") IsAudioPanSpin = false;
                             }
                         }
                     }
@@ -433,6 +521,21 @@ namespace osu.Game.Rulesets.Osu.Mods
             trollOverlay = new TrollOverlay { Depth = float.MinValue };
             drawableRuleset.Overlays.Add(trollOverlay);
             
+            try
+            {
+                tunnelVisionMod = new OsuModFlashlight();
+                tunnelVisionMod.ComboBasedSize.Value = false;
+                tunnelVisionMod.SizeMultiplier.Value = 1.0f;
+                tunnelVisionMod.ApplyToDrawableRuleset(drawableRuleset);
+
+                tunnelVisionContainer = drawableRuleset.Overlays.OfType<Container>().FirstOrDefault(c => c.Children.Any(child => child is osu.Game.Rulesets.Mods.ModFlashlight<OsuHitObject>.Flashlight));
+                if (tunnelVisionContainer != null)
+                {
+                    tunnelVisionContainer.Alpha = 0;
+                }
+            }
+            catch { }
+
             blackHoleOverlay = new BlackHoleOverlay();
             drawableRuleset.PlayfieldAdjustmentContainer.Add(blackHoleOverlay);
 
@@ -441,10 +544,21 @@ namespace osu.Game.Rulesets.Osu.Mods
             drawableRuleset.PlayfieldAdjustmentContainer.Add(HiddenCursorOverlayInstance);
         }
 
+        private OsuModFlashlight? tunnelVisionMod;
+        private Container? tunnelVisionContainer;
+        private bool wasStopScreenActive = false;
+        private bool lastGhostSliders = false;
+
+        public void ApplyToDrawableHitObject(DrawableHitObject drawable)
+        {
+            tunnelVisionMod?.ApplyToDrawableHitObject(drawable);
+        }
+
         public void ApplyToTrack(osu.Framework.Audio.IAdjustableAudioComponent track)
         {
             track.AddAdjustment(osu.Framework.Audio.AdjustableProperty.Tempo, tempoAdjustment);
             track.AddAdjustment(osu.Framework.Audio.AdjustableProperty.Frequency, frequencyAdjustment);
+            track.AddAdjustment(osu.Framework.Audio.AdjustableProperty.Balance, balanceAdjustment);
         }
 
         public void Update(Playfield playfield)
@@ -500,6 +614,8 @@ namespace osu.Game.Rulesets.Osu.Mods
                 blackHoleOverlay.Strength = BlackHoleStrength;
             }
 
+            CurrentPlayfield = playfield;
+
             if (trollOverlay != null)
             {
                 if (TriggerTrollBattery)
@@ -522,8 +638,48 @@ namespace osu.Game.Rulesets.Osu.Mods
                     trollOverlay.ShowBsod();
                     TriggerTrollBsod = false;
                 }
+                if (TriggerTrollDefender)
+                {
+                    trollOverlay.ShowDefenderAlert();
+                    TriggerTrollDefender = false;
+                }
+                if (TriggerTrollUpdate)
+                {
+                    trollOverlay.ShowWindowsUpdate();
+                    TriggerTrollUpdate = false;
+                }
+                if (TriggerTrollDonate)
+                {
+                    trollOverlay.ShowDonation();
+                    TriggerTrollDonate = false;
+                }
+                if (TriggerTrollStickyKeys)
+                {
+                    trollOverlay.ShowStickyKeys();
+                    TriggerTrollStickyKeys = false;
+                }
+                if (TriggerTrollGlitch)
+                {
+                    trollOverlay.ShowGlitch();
+                    TriggerTrollGlitch = false;
+                }
+                if (TriggerMouseDisconnect)
+                {
+                    TrollOverlay.PlayWindowsSound("Windows Hardware Remove.wav");
+                    IsMouseDisconnected = true;
+                    TriggerMouseDisconnect = false;
+                    trollOverlay.ScheduleDelayed(() =>
+                    {
+                        TrollOverlay.PlayWindowsSound("Windows Hardware Insert.wav");
+                        IsMouseDisconnected = false;
+                    }, 1800);
+                }
 
-                if (trollOverlay.IsBsodActive && !wasBsodActive)
+                trollOverlay.SetMuffled(IsMuffledAudio);
+
+                bool isStopScreenActive = trollOverlay.IsBsodActive || trollOverlay.IsUpdateActive;
+
+                if (isStopScreenActive && !wasStopScreenActive)
                 {
                     IsBsodRunning = true;
                     StopGameplayClock();
@@ -548,9 +704,9 @@ namespace osu.Game.Rulesets.Osu.Mods
                     }
 
                     HiddenCursorOverlayInstance?.SetHidden(true);
-                    wasBsodActive = true;
+                    wasStopScreenActive = true;
                 }
-                else if (!trollOverlay.IsBsodActive && wasBsodActive)
+                else if (!isStopScreenActive && wasStopScreenActive)
                 {
                     IsBsodRunning = false;
                     if (!IsFreezeActive)
@@ -571,16 +727,16 @@ namespace osu.Game.Rulesets.Osu.Mods
                     }
 
                     HiddenCursorOverlayInstance?.SetHidden(false);
-                    wasBsodActive = false;
+                    wasStopScreenActive = false;
                 }
-                else if (trollOverlay.IsBsodActive)
+                else if (isStopScreenActive)
                 {
-                    float bsodElapsed = trollOverlay.BsodElapsed;
-                    const float holdDuration = 3000f;
+                    float stopScreenElapsed = trollOverlay.IsBsodActive ? trollOverlay.BsodElapsed : trollOverlay.UpdateElapsed;
+                    float holdDuration = trollOverlay.IsBsodActive ? 3000f : 3500f;
                     const float fadeDuration = 400f;
-                    if (bsodElapsed > holdDuration)
+                    if (stopScreenElapsed > holdDuration)
                     {
-                        float progress = Math.Clamp((bsodElapsed - holdDuration) / fadeDuration, 0f, 1f);
+                        float progress = Math.Clamp((stopScreenElapsed - holdDuration) / fadeDuration, 0f, 1f);
                         if (cachedHudOverlay != null)
                             cachedHudOverlay.Alpha = progress;
                         if (GameplayCursorInstance != null)
@@ -594,11 +750,73 @@ namespace osu.Game.Rulesets.Osu.Mods
                             GameplayCursorInstance.Alpha = 0f;
                     }
                 }
-                if (TriggerTrollDefender)
+            }
+
+            if (tunnelVisionContainer != null)
+            {
+                tunnelVisionContainer.Alpha = IsTunnelVision ? 1f : 0f;
+            }
+
+            if (IsGhostSliders)
+            {
+                foreach (var d in playfield.HitObjectContainer.AliveObjects)
                 {
-                    trollOverlay.ShowDefenderAlert();
-                    TriggerTrollDefender = false;
+                    if (d is osu.Game.Rulesets.Osu.Objects.Drawables.DrawableSlider slider)
+                    {
+                        slider.Body.Alpha = 0f;
+                        slider.TailCircle.Alpha = 0f;
+                    }
                 }
+                lastGhostSliders = true;
+            }
+            else if (lastGhostSliders)
+            {
+                foreach (var d in playfield.HitObjectContainer.AliveObjects)
+                {
+                    if (d is osu.Game.Rulesets.Osu.Objects.Drawables.DrawableSlider slider)
+                    {
+                        slider.Body.Alpha = 1f;
+                        slider.TailCircle.Alpha = 1f;
+                    }
+                }
+                lastGhostSliders = false;
+            }
+
+            if (IsDrunkCamera)
+            {
+                float t = (float)playfield.Clock.CurrentTime / 1000f;
+                playfield.Rotation = MathF.Sin(t * 3.5f) * 15f;
+            }
+            else if (!IsScreenShake)
+            {
+                playfield.Rotation = 0f;
+            }
+
+            if (IsScreenShake)
+            {
+                float shakeIntensity = 12f;
+                playfield.Position = new Vector2(
+                    (rnd.NextSingle() * 2f - 1f) * shakeIntensity,
+                    (rnd.NextSingle() * 2f - 1f) * shakeIntensity
+                );
+                if (!IsDrunkCamera)
+                {
+                    playfield.Rotation = (rnd.NextSingle() * 2f - 1f) * 3.5f;
+                }
+            }
+            else if (!IsDrunkCamera)
+            {
+                playfield.Position = Vector2.Zero;
+            }
+
+            if (IsAudioPanSpin)
+            {
+                float t = (float)playfield.Clock.CurrentTime / 1000f;
+                balanceAdjustment.Value = Math.Sin(t * 4.2);
+            }
+            else
+            {
+                balanceAdjustment.Value = 0;
             }
 
             osu.Game.Beatmaps.FramedBeatmapClock.ExternalAudioOffset = AudioDesyncMilliseconds;

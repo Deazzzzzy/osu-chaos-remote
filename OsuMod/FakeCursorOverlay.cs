@@ -47,6 +47,15 @@ namespace osu.Game.Rulesets.Osu.Mods
                     Add(fake);
                 }
             }
+            else if (mode == "ARMY" || mode == "CLONES")
+            {
+                for (int i = 0; i < 9; i++)
+                {
+                    var fake = new FakeCursorContainer(realCursor, "ARMY_" + i);
+                    fakeCursors.Add(fake);
+                    Add(fake);
+                }
+            }
         }
 
         private void ClearCursors()
@@ -78,6 +87,15 @@ namespace osu.Game.Rulesets.Osu.Mods
             if (mode == "SWARM_0") { delayFrames = 5; swarmOffset = new Vector2(30, 30); }
             if (mode == "SWARM_1") { delayFrames = 15; swarmOffset = new Vector2(-30, 20); }
             if (mode == "SWARM_2") { delayFrames = 25; swarmOffset = new Vector2(10, -40); }
+
+            if (mode.StartsWith("ARMY_"))
+            {
+                int idx = int.Parse(mode.Substring(5));
+                delayFrames = (idx + 1) * 3;
+                float angle = idx * (MathF.PI * 2f / 9f);
+                float dist = 24f + (idx % 3) * 14f;
+                swarmOffset = new Vector2(MathF.Cos(angle) * dist, MathF.Sin(angle) * dist);
+            }
         }
 
         protected override void Update()
@@ -109,7 +127,7 @@ namespace osu.Game.Rulesets.Osu.Mods
                 newPos.X = 512 - realPos.X;
                 newPos.Y = 384 - realPos.Y;
             }
-            else if (mode.StartsWith("SWARM"))
+            else if (mode.StartsWith("SWARM") || mode.StartsWith("ARMY"))
             {
                 posHistory.Enqueue(realPos);
                 if (posHistory.Count > delayFrames)
