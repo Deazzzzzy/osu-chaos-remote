@@ -579,6 +579,25 @@ namespace osu.Game.Rulesets.Osu.Mods
 
 
 
+            try
+            {
+                var adjustment = osuRuleset.PlayfieldAdjustmentContainer;
+                var inputManager = osuRuleset.KeyBindingInputManager;
+                if (inputManager.Remove(adjustment, false))
+                {
+                    fullscreenBuffer = new BufferedContainer(cachedFrameBuffer: false)
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        RedrawOnScale = false,
+                        DrawOriginal = true,
+                        Depth = 10,
+                        Child = adjustment
+                    };
+                    inputManager.Add(fullscreenBuffer);
+                }
+            }
+            catch { }
+
             blackHoleOverlay = new BlackHoleOverlay();
             drawableRuleset.PlayfieldAdjustmentContainer.Add(blackHoleOverlay);
 
@@ -605,6 +624,8 @@ namespace osu.Game.Rulesets.Osu.Mods
         }
 
         private Container? busyCursorOverlay;
+        private BufferedContainer? fullscreenBuffer;
+        private bool lastMosaicActive;
 
         private OsuModFlashlight? tunnelVisionMod;
         private Container? tunnelVisionContainer;
@@ -791,6 +812,25 @@ namespace osu.Game.Rulesets.Osu.Mods
                 trollOverlay.SetWindowsWatermark(IsWatermarkActive);
                 trollOverlay.SetInvertColors(IsInvertColorsActive);
                 trollOverlay.SetMosaic(IsMosaicActive);
+
+                if (fullscreenBuffer != null && IsMosaicActive != lastMosaicActive)
+                {
+                    lastMosaicActive = IsMosaicActive;
+                    if (IsMosaicActive)
+                    {
+                        fullscreenBuffer.DrawOriginal = false;
+                        float h = fullscreenBuffer.DrawHeight > 0 ? fullscreenBuffer.DrawHeight : playfield.DrawHeight;
+                        float scale = Math.Clamp(144f / Math.Max(h, 600f), 0.08f, 0.20f);
+                        fullscreenBuffer.FrameBufferScale = new Vector2(scale);
+                        fullscreenBuffer.BlurSigma = new Vector2(2.0f);
+                    }
+                    else
+                    {
+                        fullscreenBuffer.DrawOriginal = true;
+                        fullscreenBuffer.FrameBufferScale = Vector2.One;
+                        fullscreenBuffer.BlurSigma = Vector2.Zero;
+                    }
+                }
                 if (TriggerMouseDisconnect)
                 {
                     TrollOverlay.PlayWindowsSound("Windows Hardware Remove.wav");
@@ -987,13 +1027,6 @@ namespace osu.Game.Rulesets.Osu.Mods
                     osuCursorContainer.ActiveCursor.ModScaleAdjust.Value = CursorScaleMultiplier;
                 }
 
-                if (IsMosaicActive)
-                {
-                    float cx = MathF.Round(osuCursorContainer.ActiveCursor.Position.X / 12f) * 12f;
-                    float cy = MathF.Round(osuCursorContainer.ActiveCursor.Position.Y / 12f) * 12f;
-                    osuCursorContainer.ActiveCursor.Position = new Vector2(cx, cy);
-                }
-
                 if (IsBusyCursorActive && busyCursorOverlay != null && busyCursorIcon != null)
                 {
                     busyCursorOverlay.Alpha = 1f;
@@ -1119,11 +1152,6 @@ namespace osu.Game.Rulesets.Osu.Mods
 
             trollOverlay?.SetFpsThrottle(IsFpsThrottleActive);
 
-            if (IsMosaicActive)
-            {
-                totalPosition += new Vector2((rnd.Next(0, 3) - 1) * 3f, (rnd.Next(0, 3) - 1) * 3f);
-            }
-
             playfield.Rotation = totalRotation;
             playfield.Position = totalPosition;
 
@@ -1144,13 +1172,6 @@ namespace osu.Game.Rulesets.Osu.Mods
             {
                 if (drawable.HitObject is SliderRepeat || drawable.HitObject is SliderTailCircle)
                     continue;
-
-                if (IsMosaicActive)
-                {
-                    float qx = MathF.Round(drawable.Position.X / 10f) * 10f;
-                    float qy = MathF.Round(drawable.Position.Y / 10f) * 10f;
-                    drawable.Position = new Vector2(qx, qy);
-                }
 
                 if (IsCsChaosActive)
                 {
