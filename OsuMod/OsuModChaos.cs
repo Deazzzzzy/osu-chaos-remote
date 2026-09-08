@@ -175,10 +175,10 @@ namespace osu.Game.Rulesets.Osu.Mods
             {
                 var prop = typeof(Player).GetProperty("GameplayClockContainer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                 var clock = prop?.GetValue(PlayerInstance);
-                if (clock != null)
-                {
-                    clock.GetType().GetMethod("Stop")?.Invoke(clock, null);
-                }
+                if (clock is osu.Game.Screens.Play.GameplayClockContainer gcc)
+                    gcc.Stop();
+                else
+                    clock?.GetType().GetMethod("Stop")?.Invoke(clock, null);
             }
         }
 
@@ -188,10 +188,10 @@ namespace osu.Game.Rulesets.Osu.Mods
             {
                 var prop = typeof(Player).GetProperty("GameplayClockContainer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                 var clock = prop?.GetValue(PlayerInstance);
-                if (clock != null)
-                {
-                    clock.GetType().GetMethod("Start")?.Invoke(clock, null);
-                }
+                if (clock is osu.Game.Screens.Play.GameplayClockContainer gcc)
+                    gcc.Start();
+                else
+                    clock?.GetType().GetMethod("Start")?.Invoke(clock, null);
             }
         }
 
@@ -984,7 +984,7 @@ namespace osu.Game.Rulesets.Osu.Mods
 
                 trollOverlay.SetMuffled(IsMuffledAudio);
 
-                bool isStopScreenActive = trollOverlay.IsBsodActive || trollOverlay.IsUpdateActive;
+                bool isStopScreenActive = trollOverlay.IsBsodActive || trollOverlay.IsUpdateActive || trollOverlay.IsGpuCrashActive;
 
                 if (isStopScreenActive && !wasStopScreenActive)
                 {
@@ -1038,9 +1038,11 @@ namespace osu.Game.Rulesets.Osu.Mods
                 }
                 else if (isStopScreenActive)
                 {
-                    float stopScreenElapsed = trollOverlay.IsBsodActive ? trollOverlay.BsodElapsed : trollOverlay.UpdateElapsed;
-                    float holdDuration = trollOverlay.IsBsodActive ? 3000f : 3500f;
-                    const float fadeDuration = 400f;
+                    float stopScreenElapsed = trollOverlay.IsBsodActive ? trollOverlay.BsodElapsed
+                        : (trollOverlay.IsUpdateActive ? trollOverlay.UpdateElapsed : trollOverlay.GpuCrashElapsed);
+                    float holdDuration = trollOverlay.IsBsodActive ? 3000f
+                        : (trollOverlay.IsUpdateActive ? 3500f : 1300f);
+                    float fadeDuration = trollOverlay.IsGpuCrashActive ? 100f : 400f;
                     if (stopScreenElapsed > holdDuration)
                     {
                         float progress = Math.Clamp((stopScreenElapsed - holdDuration) / fadeDuration, 0f, 1f);

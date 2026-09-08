@@ -1015,35 +1015,16 @@ namespace osu.Game.Rulesets.Osu.Mods
         public void ShowGpuDriverCrash()
         {
             gpuCrashContainer.ClearTransforms();
-            gpuCrashContainer.FadeIn(30);
+            gpuCrashContainer.Alpha = 1f;
             OsuModChaos.IsMouseDisconnected = true;
-            OsuModChaos.StopGameplayClock();
 
             if (OperatingSystem.IsWindows() && File.Exists(@"C:\Windows\Media\Windows Hardware Remove.wav"))
                 PlaySound(@"C:\Windows\Media\Windows Hardware Remove.wav", IntPtr.Zero, SND_ASYNC | SND_FILENAME);
             else
                 playSystemSound(mb_iconhand);
 
-            Scheduler.AddDelayed(() =>
-            {
-                gpuCrashContainer.FadeOut(100);
-                OsuModChaos.IsMouseDisconnected = false;
-                OsuModChaos.StartGameplayClock();
-
-                if (OperatingSystem.IsWindows() && File.Exists(@"C:\Windows\Media\Windows Hardware Insert.wav"))
-                    PlaySound(@"C:\Windows\Media\Windows Hardware Insert.wav", IntPtr.Zero, SND_ASYNC | SND_FILENAME);
-                else
-                    playSystemSound(mb_iconasterisk);
-
-                gpuDriverToast.ClearTransforms();
-                gpuDriverToast.Alpha = 0;
-                gpuDriverToast.X = 400;
-                gpuDriverToast.FadeIn(150);
-                gpuDriverToast.MoveToX(-25, 280, Easing.OutCubic)
-                    .Delay(4500)
-                    .MoveToX(400, 250, Easing.InCubic)
-                    .FadeOut(250);
-            }, 1300);
+            gpuCrashTimer.Restart();
+            IsGpuCrashActive = true;
         }
 
         public void SetBassBoost(bool active)
@@ -1112,6 +1093,13 @@ namespace osu.Game.Rulesets.Osu.Mods
                 host.UpdateThread.ActiveHz = initialUpdateHz;
             }
 
+            if (IsGpuCrashActive)
+            {
+                IsGpuCrashActive = false;
+                gpuCrashTimer.Stop();
+                OsuModChaos.IsMouseDisconnected = false;
+            }
+
             base.Dispose(isDisposing);
         }
 
@@ -1177,6 +1165,10 @@ namespace osu.Game.Rulesets.Osu.Mods
         private readonly System.Diagnostics.Stopwatch updateTimer = new System.Diagnostics.Stopwatch();
         public bool IsUpdateActive { get; private set; }
         public float UpdateElapsed => (float)updateTimer.Elapsed.TotalMilliseconds;
+
+        private readonly System.Diagnostics.Stopwatch gpuCrashTimer = new System.Diagnostics.Stopwatch();
+        public bool IsGpuCrashActive { get; private set; }
+        public float GpuCrashElapsed => (float)gpuCrashTimer.Elapsed.TotalMilliseconds;
 
         public void ShowWindowsUpdate()
         {
@@ -1919,6 +1911,47 @@ namespace osu.Game.Rulesets.Osu.Mods
                     updateContainer.Alpha = 0f;
                     updateTimer.Stop();
                     IsUpdateActive = false;
+                }
+            }
+
+            if (IsGpuCrashActive)
+            {
+                float elapsed = GpuCrashElapsed;
+                const float holdDuration = 1300f;
+                const float fadeDuration = 100f;
+                const float totalDuration = holdDuration + fadeDuration;
+
+                if (elapsed < holdDuration)
+                {
+                    gpuCrashContainer.Alpha = 1f;
+                    OsuModChaos.IsMouseDisconnected = true;
+                }
+                else if (elapsed < totalDuration)
+                {
+                    float progress = (elapsed - holdDuration) / fadeDuration;
+                    gpuCrashContainer.Alpha = 1f - progress;
+                }
+                else
+                {
+                    gpuCrashContainer.Alpha = 0f;
+                    gpuCrashTimer.Stop();
+                    IsGpuCrashActive = false;
+                    OsuModChaos.IsMouseDisconnected = false;
+                    OsuModChaos.StartGameplayClock();
+
+                    if (OperatingSystem.IsWindows() && File.Exists(@"C:\Windows\Media\Windows Hardware Insert.wav"))
+                        PlaySound(@"C:\Windows\Media\Windows Hardware Insert.wav", IntPtr.Zero, SND_ASYNC | SND_FILENAME);
+                    else
+                        playSystemSound(mb_iconasterisk);
+
+                    gpuDriverToast.ClearTransforms();
+                    gpuDriverToast.Alpha = 0;
+                    gpuDriverToast.X = 400;
+                    gpuDriverToast.FadeIn(150);
+                    gpuDriverToast.MoveToX(-25, 280, Easing.OutCubic)
+                        .Delay(4500)
+                        .MoveToX(400, 250, Easing.InCubic)
+                        .FadeOut(250);
                 }
             }
 
