@@ -248,18 +248,6 @@ class ModernControlPanel:
         # Вкладка 2: КУРСОР (Физика, Лаг, Шизофрения, Ограничения)
         # ==========================================
 
-        # --- СЕКЦИЯ: КУРСОР НА ЛЬДУ / ИНЕРЦИЯ (НОВОЕ В ФАЗЕ 4) ---
-        slippery_frame = tk.Frame(tab_cursor, bg=self.panel_color, padx=15, pady=12)
-        slippery_frame.pack(fill=tk.X, pady=5)
-        self.slippery_header = tk.Label(slippery_frame, text="КУРСОР НА ЛЬДУ (ВЫКЛЮЧЕН 🔴)", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.slippery_header.pack(anchor=tk.W, pady=(0, 4))
-        tk.Label(slippery_frame, text="Курсор скользит как по льду с физической инерцией и ускорением!", font=("Segoe UI", 9), bg=self.panel_color, fg="#a6adc8").pack(anchor=tk.W, pady=(0, 6))
-
-        btn_slip = tk.Frame(slippery_frame, bg=self.panel_color)
-        btn_slip.pack(fill=tk.X, pady=2)
-        tk.Button(btn_slip, text="ВКЛЮЧИТЬ ЛЕД 🧊", font=("Segoe UI", 9, "bold"), bg=self.accent_cyan, fg="#11111b", bd=0, command=lambda: self.send_command("SLIPPERY_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_slip, text="ВЫКЛЮЧИТЬ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("SLIPPERY_OFF")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
-
         # --- СЕКЦИЯ: МАГНИТНОЕ ОТТАЛКИВАНИЕ ОТ НОТ (НОВОЕ В ФАЗЕ 4) ---
         repulsion_frame = tk.Frame(tab_cursor, bg=self.panel_color, padx=15, pady=12)
         repulsion_frame.pack(fill=tk.X, pady=5)
@@ -808,10 +796,6 @@ class ModernControlPanel:
             self.hidden_header.config(text="СЛЕПОТА (Hidden) (ВКЛЮЧЕН 🟢)", fg=self.accent_on)
         elif command == "HIDDEN_OFF":
             self.hidden_header.config(text="СЛЕПОТА (Hidden) (ВЫКЛЮЧЕН 🔴)", fg=self.text_color)
-        elif command == "SLIPPERY_ON":
-            self.slippery_header.config(text="КУРСОР НА ЛЬДУ (ВКЛЮЧЕН 🟢)", fg=self.accent_cyan)
-        elif command == "SLIPPERY_OFF":
-            self.slippery_header.config(text="КУРСОР НА ЛЬДУ (ВЫКЛЮЧЕН 🔴)", fg=self.text_color)
         elif command == "REPULSION_ON":
             self.repulsion_header.config(text="ОТТАЛКИВАНИЕ КУРСОРА ОТ НОТ (ВКЛЮЧЕНО 🟢)", fg=self.accent_yellow)
         elif command == "REPULSION_OFF":

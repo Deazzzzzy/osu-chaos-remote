@@ -116,7 +116,6 @@ namespace osu.Game.Rulesets.Osu.Mods
         // Phase 4 Mouse & Cursor Trolling
         public static volatile bool IsMouseDisconnected = false;
         public static volatile bool TriggerMouseDisconnect = false;
-        public static volatile bool IsSlipperyCursor = false;
         public static volatile float CursorJitterStrength = 0f;
         public static volatile bool IsCircleRepulsion = false;
 
@@ -453,8 +452,6 @@ namespace osu.Game.Rulesets.Osu.Mods
                                 else if (msg == "TROLL_STICKYKEYS" || msg == "TROLL:STICKYKEYS") TriggerTrollStickyKeys = true;
                                 else if (msg == "TROLL_GLITCH" || msg == "TROLL:GLITCH") TriggerTrollGlitch = true;
                                 else if (msg == "DEVICE_DISCONNECT" || msg == "MOUSE_DISCONNECT") TriggerMouseDisconnect = true;
-                                else if (msg == "SLIPPERY_ON") IsSlipperyCursor = true;
-                                else if (msg == "SLIPPERY_OFF") IsSlipperyCursor = false;
                                 else if (msg == "REPULSION_ON") IsCircleRepulsion = true;
                                 else if (msg == "REPULSION_OFF") IsCircleRepulsion = false;
                                 else if (msg.StartsWith("JITTER:"))

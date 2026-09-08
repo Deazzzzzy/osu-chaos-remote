@@ -10,7 +10,6 @@ A fun interactive mod for **osu!lazer** that allows a second person (such as str
 
 ### 1. Cursor & Controls
 - **🔌 Mouse Disconnect (1.8s)**: Plays Windows device disconnect chime, completely locks cursor movement for 1.8s, then plays device connect chime.
-- **🧊 Slippery Cursor (Ice Physics)**: Realistic slippery ice momentum — cursor glides with inertia, drift, and acceleration.
 - **🧲 Note Repulsion**: Cursor is physically repelled when getting close to active circles and sliders (130px radius).
 - **🫨 Shaky Hands (Jitter)**: High-frequency cursor vibration simulating adrenaline tremor (customizable strength slider).
 - **👥 Army of Clones**: Spawns 9 fake trailing/orbiting cursors with staggered delays and offsets.
