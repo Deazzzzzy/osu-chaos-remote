@@ -143,14 +143,11 @@ namespace osu.Game.Rulesets.Osu.Mods
         public static volatile bool TriggerBarrelRoll = false;
         private static readonly System.Diagnostics.Stopwatch barrelRollTimer = new System.Diagnostics.Stopwatch();
         public static volatile bool IsCsChaosActive = false;
-        public static volatile bool TriggerFpsThrottle = false;
-        public static volatile bool IsFpsThrottleActive = false;
-        private static readonly System.Diagnostics.Stopwatch fpsThrottleTimer = new System.Diagnostics.Stopwatch();
-        private Vector2 throttledPosition = Vector2.Zero;
-        private float throttledRotation = 0f;
-        private double lastThrottleSnapshotTime = 0;
-        private Vector2? throttledCursorPos;
-        private Vector2 throttledStutterOffset = Vector2.Zero;
+        public static volatile float NotificationVolume = 2.0f;
+        public static volatile int TargetFps = 0;
+        private int lastAppliedFps = -1;
+        private float lastAppliedNotifVolume = -1;
+        public static osu.Framework.Platform.GameHost? GameHostInstance;
         public static volatile bool TriggerTapeStop = false;
         private static readonly System.Diagnostics.Stopwatch tapeStopTimer = new System.Diagnostics.Stopwatch();
         public static volatile bool IsReverbActive = false;
@@ -521,7 +518,22 @@ namespace osu.Game.Rulesets.Osu.Mods
                                 else if (msg == "BARREL_ROLL") TriggerBarrelRoll = true;
                                 else if (msg == "CS_CHAOS_ON") IsCsChaosActive = true;
                                 else if (msg == "CS_CHAOS_OFF") IsCsChaosActive = false;
-                                else if (msg == "FPS_THROTTLE") TriggerFpsThrottle = true;
+                                else if (msg.StartsWith("SET_NOTIF_VOLUME:") || msg.StartsWith("NOTIF_VOLUME:"))
+                                {
+                                    string valStr = msg.Substring(msg.IndexOf(':') + 1);
+                                    if (float.TryParse(valStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float nvol))
+                                    {
+                                        NotificationVolume = Math.Clamp(nvol, 0f, 2.0f);
+                                    }
+                                }
+                                else if (msg.StartsWith("SET_FPS:") || msg.StartsWith("FPS:"))
+                                {
+                                    string valStr = msg.Substring(msg.IndexOf(':') + 1);
+                                    if (int.TryParse(valStr, out int fpsVal))
+                                    {
+                                        TargetFps = Math.Max(0, fpsVal);
+                                    }
+                                }
                                 else if (msg == "TAPE_STOP") TriggerTapeStop = true;
                                 else if (msg == "REVERB_ON") IsReverbActive = true;
                                 else if (msg == "REVERB_OFF") IsReverbActive = false;
@@ -1098,59 +1110,17 @@ namespace osu.Game.Rulesets.Osu.Mods
                 );
             }
 
-            if (TriggerFpsThrottle)
+            if (TargetFps != lastAppliedFps)
             {
-                fpsThrottleTimer.Restart();
-                lastThrottleSnapshotTime = 0;
-                throttledCursorPos = null;
-                TriggerFpsThrottle = false;
+                lastAppliedFps = TargetFps;
+                trollOverlay?.ApplyFpsLimit(TargetFps);
             }
 
-            if (fpsThrottleTimer.IsRunning)
+            if (Math.Abs(NotificationVolume - lastAppliedNotifVolume) > 0.01f)
             {
-                float fpsMs = (float)fpsThrottleTimer.Elapsed.TotalMilliseconds;
-                if (fpsMs < 3500f)
-                {
-                    IsFpsThrottleActive = true;
-                    double nowTime = Environment.TickCount64;
-                    // 15 FPS = 66.6ms frame time
-                    if (nowTime - lastThrottleSnapshotTime >= 66.6 || lastThrottleSnapshotTime == 0)
-                    {
-                        throttledPosition = totalPosition;
-                        throttledRotation = totalRotation;
-                        throttledStutterOffset = new Vector2(
-                            (rnd.NextSingle() * 2f - 1f) * 10f,
-                            (rnd.NextSingle() * 2f - 1f) * 10f
-                        );
-                        if (playfield.Cursor is OsuCursorContainer cursorCont && cursorCont.ActiveCursor != null)
-                        {
-                            throttledCursorPos = cursorCont.ActiveCursor.Position;
-                        }
-                        lastThrottleSnapshotTime = nowTime;
-                    }
-
-                    totalPosition = throttledPosition + throttledStutterOffset;
-                    totalRotation = throttledRotation;
-
-                    if (playfield.Cursor is OsuCursorContainer osuCursor && osuCursor.ActiveCursor != null && throttledCursorPos.HasValue)
-                    {
-                        osuCursor.ActiveCursor.Position = throttledCursorPos.Value;
-                    }
-                }
-                else
-                {
-                    IsFpsThrottleActive = false;
-                    fpsThrottleTimer.Reset();
-                    throttledCursorPos = null;
-                    throttledStutterOffset = Vector2.Zero;
-                }
+                lastAppliedNotifVolume = NotificationVolume;
+                trollOverlay?.UpdateNotificationVolume(NotificationVolume);
             }
-            else
-            {
-                IsFpsThrottleActive = false;
-            }
-
-            trollOverlay?.SetFpsThrottle(IsFpsThrottleActive);
 
             playfield.Rotation = totalRotation;
             playfield.Position = totalPosition;

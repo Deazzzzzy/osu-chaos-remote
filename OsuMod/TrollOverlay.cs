@@ -47,12 +47,14 @@ namespace osu.Game.Rulesets.Osu.Mods
         private Container windowsWatermarkContainer = null!;
         private Container invertColorsContainer = null!;
         private Container mosaicContainer = null!;
-        private Container fpsThrottleContainer = null!;
 
         private bool lastInvertColors;
         private bool lastMosaic;
         private bool lastWatermark;
-        private bool lastFpsThrottle;
+
+        private osu.Framework.Platform.GameHost? host;
+        private static double initialDrawHz = -1;
+        private static double initialUpdateHz = -1;
 
         private readonly List<Box> glitchSlices = new List<Box>();
         private osu.Game.Audio.Effects.AudioFilter? lowPassFilter;
@@ -75,8 +77,11 @@ namespace osu.Game.Rulesets.Osu.Mods
         }
 
         [BackgroundDependencyLoader]
-        private void load(osu.Framework.Audio.AudioManager audio)
+        private void load(osu.Framework.Audio.AudioManager audio, osu.Framework.Platform.GameHost host)
         {
+            this.host = host;
+            OsuModChaos.GameHostInstance = host;
+
             popInSample = audio.Samples.Get("UI/overlay-pop-in");
             combobreakSample = audio.Samples.Get("Gameplay/combobreak");
 
@@ -97,7 +102,6 @@ namespace osu.Game.Rulesets.Osu.Mods
             windowsWatermarkContainer = createWindowsWatermark();
             invertColorsContainer = createInvertColorsContainer();
             mosaicContainer = createMosaicContainer();
-            fpsThrottleContainer = createFpsThrottleContainer();
 
             var children = new List<Drawable>
             {
@@ -114,7 +118,6 @@ namespace osu.Game.Rulesets.Osu.Mods
                 donationToast,
                 stickyKeysDialog,
                 windowsWatermarkContainer,
-                fpsThrottleContainer,
             };
 
             try
@@ -562,6 +565,7 @@ namespace osu.Game.Rulesets.Osu.Mods
             {
                 try
                 {
+                    discordTrack.Volume.Value = Math.Clamp(OsuModChaos.NotificationVolume, 0f, 1.0f);
                     discordTrack.Seek(0);
                     discordTrack.Start();
                     played = true;
@@ -578,6 +582,8 @@ namespace osu.Game.Rulesets.Osu.Mods
                     {
                         mciSendString("close disc_ring", null, 0, IntPtr.Zero);
                         mciSendString($"open \"{target}\" type mpegvideo alias disc_ring", null, 0, IntPtr.Zero);
+                        int mciVol = (int)Math.Clamp(OsuModChaos.NotificationVolume * 500f, 0, 1000);
+                        mciSendString($"setaudio disc_ring volume to {mciVol}", null, 0, IntPtr.Zero);
                         mciSendString("play disc_ring", null, 0, IntPtr.Zero);
                         played = true;
                     }
@@ -639,6 +645,7 @@ namespace osu.Game.Rulesets.Osu.Mods
             {
                 try
                 {
+                    telegramTrack.Volume.Value = Math.Clamp(OsuModChaos.NotificationVolume, 0f, 1.0f);
                     telegramTrack.Seek(0);
                     telegramTrack.Start();
                     played = true;
@@ -655,6 +662,8 @@ namespace osu.Game.Rulesets.Osu.Mods
                     {
                         mciSendString("close tg_ring", null, 0, IntPtr.Zero);
                         mciSendString($"open \"{target}\" type mpegvideo alias tg_ring", null, 0, IntPtr.Zero);
+                        int mciVol = (int)Math.Clamp(OsuModChaos.NotificationVolume * 500f, 0, 1000);
+                        mciSendString($"setaudio tg_ring volume to {mciVol}", null, 0, IntPtr.Zero);
                         mciSendString("play tg_ring", null, 0, IntPtr.Zero);
                         played = true;
                     }
@@ -716,6 +725,7 @@ namespace osu.Game.Rulesets.Osu.Mods
             {
                 try
                 {
+                    steamTrack.Volume.Value = Math.Clamp(OsuModChaos.NotificationVolume, 0f, 1.0f);
                     steamTrack.Seek(0);
                     steamTrack.Start();
                     played = true;
@@ -732,6 +742,8 @@ namespace osu.Game.Rulesets.Osu.Mods
                     {
                         mciSendString("close steam_msg", null, 0, IntPtr.Zero);
                         mciSendString($"open \"{target}\" type mpegvideo alias steam_msg", null, 0, IntPtr.Zero);
+                        int mciVol = (int)Math.Clamp(OsuModChaos.NotificationVolume * 500f, 0, 1000);
+                        mciSendString($"setaudio steam_msg volume to {mciVol}", null, 0, IntPtr.Zero);
                         mciSendString("play steam_msg", null, 0, IntPtr.Zero);
                         played = true;
                     }
@@ -798,16 +810,55 @@ namespace osu.Game.Rulesets.Osu.Mods
                 mosaicContainer.FadeOut(150, Easing.InCubic);
         }
 
-        public void SetFpsThrottle(bool active)
+        public void ApplyFpsLimit(int fps)
         {
-            if (active == lastFpsThrottle) return;
-            lastFpsThrottle = active;
+            if (host == null) return;
 
-            fpsThrottleContainer.ClearTransforms();
-            if (active)
-                fpsThrottleContainer.FadeIn(120);
+            if (initialDrawHz < 0)
+            {
+                initialDrawHz = host.DrawThread.ActiveHz;
+                initialUpdateHz = host.UpdateThread.ActiveHz;
+            }
+
+            if (fps > 0)
+            {
+                host.DrawThread.ActiveHz = fps;
+                host.UpdateThread.ActiveHz = fps;
+            }
             else
-                fpsThrottleContainer.FadeOut(180);
+            {
+                host.DrawThread.ActiveHz = initialDrawHz > 0 ? initialDrawHz : double.MaxValue;
+                host.UpdateThread.ActiveHz = initialUpdateHz > 0 ? initialUpdateHz : 1000;
+            }
+        }
+
+        public void UpdateNotificationVolume(float vol)
+        {
+            if (discordTrack != null) discordTrack.Volume.Value = Math.Clamp(vol, 0f, 1.0f);
+            if (telegramTrack != null) telegramTrack.Volume.Value = Math.Clamp(vol, 0f, 1.0f);
+            if (steamTrack != null) steamTrack.Volume.Value = Math.Clamp(vol, 0f, 1.0f);
+
+            if (OperatingSystem.IsWindows())
+            {
+                int mciVol = (int)Math.Clamp(vol * 500f, 0, 1000);
+                try
+                {
+                    mciSendString($"setaudio disc_ring volume to {mciVol}", null, 0, IntPtr.Zero);
+                    mciSendString($"setaudio tg_ring volume to {mciVol}", null, 0, IntPtr.Zero);
+                    mciSendString($"setaudio steam_msg volume to {mciVol}", null, 0, IntPtr.Zero);
+                }
+                catch { }
+            }
+        }
+
+        protected override void Dispose(bool isDisposing)
+        {
+            if (host != null && initialDrawHz > 0)
+            {
+                host.DrawThread.ActiveHz = initialDrawHz;
+                host.UpdateThread.ActiveHz = initialUpdateHz;
+            }
+            base.Dispose(isDisposing);
         }
 
 
@@ -1473,56 +1524,7 @@ namespace osu.Game.Rulesets.Osu.Mods
             };
         }
 
-        private Container createFpsThrottleContainer()
-        {
-            return new Container
-            {
-                Anchor = Anchor.TopCentre,
-                Origin = Anchor.TopCentre,
-                Position = new Vector2(0, 30),
-                AutoSizeAxes = Axes.Both,
-                Alpha = 0,
-                Depth = float.MinValue + 20,
-                Masking = true,
-                CornerRadius = 8,
-                BorderThickness = 2,
-                BorderColour = Colour4.FromHex("#ff3333"),
-                Children = new Drawable[]
-                {
-                    new Box
-                    {
-                        RelativeSizeAxes = Axes.Both,
-                        Colour = Colour4.FromHex("#180606").Opacity(0.9f)
-                    },
-                    new FillFlowContainer
-                    {
-                        AutoSizeAxes = Axes.Both,
-                        Direction = FillDirection.Horizontal,
-                        Padding = new MarginPadding { Horizontal = 16, Vertical = 8 },
-                        Spacing = new Vector2(10, 0),
-                        Children = new Drawable[]
-                        {
-                            new SpriteIcon
-                            {
-                                Anchor = Anchor.CentreLeft,
-                                Origin = Anchor.CentreLeft,
-                                Icon = FontAwesome.Solid.ExclamationTriangle,
-                                Size = new Vector2(18),
-                                Colour = Colour4.FromHex("#ff4444")
-                            },
-                            new OsuSpriteText
-                            {
-                                Anchor = Anchor.CentreLeft,
-                                Origin = Anchor.CentreLeft,
-                                Text = "⚠️ 15 FPS (66.7 ms) • ТРОТТЛИНГ GPU / CPU",
-                                Font = OsuFont.GetFont(size: 15, weight: FontWeight.Bold),
-                                Colour = Colour4.White
-                            }
-                        }
-                    }
-                }
-            };
-        }
+
 
         private Container createMosaicContainer()
         {
