@@ -1535,6 +1535,24 @@ namespace osu.Game.Rulesets.Osu.Mods
                 Alpha = 0
             };
 
+            // Interlaced video scanlines for authentic low-resolution display feel
+            var scanlines = new FillFlowContainer
+            {
+                RelativeSizeAxes = Axes.Both,
+                Direction = FillDirection.Vertical,
+                Spacing = new Vector2(0, 3),
+            };
+            for (int i = 0; i < 220; i++)
+            {
+                scanlines.Add(new Box
+                {
+                    RelativeSizeAxes = Axes.X,
+                    Height = 1,
+                    Colour = Colour4.Black.Opacity(0.20f)
+                });
+            }
+            container.Add(scanlines);
+
             // Low-resolution 144p quality badge in corner
             container.Add(new Container
             {
