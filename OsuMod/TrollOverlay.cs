@@ -1017,6 +1017,7 @@ namespace osu.Game.Rulesets.Osu.Mods
             gpuCrashContainer.ClearTransforms();
             gpuCrashContainer.FadeIn(30);
             OsuModChaos.IsMouseDisconnected = true;
+            OsuModChaos.StopGameplayClock();
 
             if (OperatingSystem.IsWindows() && File.Exists(@"C:\Windows\Media\Windows Hardware Remove.wav"))
                 PlaySound(@"C:\Windows\Media\Windows Hardware Remove.wav", IntPtr.Zero, SND_ASYNC | SND_FILENAME);
@@ -1027,6 +1028,7 @@ namespace osu.Game.Rulesets.Osu.Mods
             {
                 gpuCrashContainer.FadeOut(100);
                 OsuModChaos.IsMouseDisconnected = false;
+                OsuModChaos.StartGameplayClock();
 
                 if (OperatingSystem.IsWindows() && File.Exists(@"C:\Windows\Media\Windows Hardware Insert.wav"))
                     PlaySound(@"C:\Windows\Media\Windows Hardware Insert.wav", IntPtr.Zero, SND_ASYNC | SND_FILENAME);

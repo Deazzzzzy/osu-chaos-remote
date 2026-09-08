@@ -143,6 +143,8 @@ namespace osu.Game.Rulesets.Osu.Mods
         public static volatile bool TriggerBarrelRoll = false;
         private static readonly System.Diagnostics.Stopwatch barrelRollTimer = new System.Diagnostics.Stopwatch();
         public static volatile bool IsCsChaosActive = false;
+        public static volatile float CsChaosMinScale = 0.40f;
+        public static volatile float CsChaosMaxScale = 1.70f;
         public static volatile int TargetFps = 0;
         private int lastAppliedFps = -1;
         public static osu.Framework.Platform.GameHost? GameHostInstance;
@@ -553,6 +555,29 @@ namespace osu.Game.Rulesets.Osu.Mods
                                 else if (msg == "BARREL_ROLL") TriggerBarrelRoll = true;
                                 else if (msg == "CS_CHAOS_ON") IsCsChaosActive = true;
                                 else if (msg == "CS_CHAOS_OFF") IsCsChaosActive = false;
+                                else if (msg.StartsWith("CS_CHAOS_MIN:"))
+                                {
+                                    string valStr = msg.Substring(13);
+                                    if (float.TryParse(valStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float minVal))
+                                        CsChaosMinScale = Math.Clamp(minVal, 0.05f, 5.0f);
+                                }
+                                else if (msg.StartsWith("CS_CHAOS_MAX:"))
+                                {
+                                    string valStr = msg.Substring(13);
+                                    if (float.TryParse(valStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float maxVal))
+                                        CsChaosMaxScale = Math.Clamp(maxVal, 0.05f, 5.0f);
+                                }
+                                else if (msg.StartsWith("CS_CHAOS_RANGE:"))
+                                {
+                                    var parts = msg.Substring(15).Split(':');
+                                    if (parts.Length == 2 &&
+                                        float.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float minV) &&
+                                        float.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float maxV))
+                                    {
+                                        CsChaosMinScale = Math.Clamp(minV, 0.05f, 5.0f);
+                                        CsChaosMaxScale = Math.Clamp(maxV, 0.05f, 5.0f);
+                                    }
+                                }
 
                                 else if (msg.StartsWith("SET_FPS:") || msg.StartsWith("FPS:"))
                                 {
@@ -1258,7 +1283,7 @@ namespace osu.Game.Rulesets.Osu.Mods
                 if (IsCsChaosActive)
                 {
                     int hash = drawable.HitObject.StartTime.GetHashCode() ^ drawable.HitObject.GetHashCode();
-                    float targetScale = (Math.Abs(hash) % 2 == 0) ? 1.65f : 0.42f;
+                    float targetScale = (Math.Abs(hash) % 2 == 0) ? CsChaosMaxScale : CsChaosMinScale;
                     drawable.Scale = new Vector2(targetScale);
                 }
                 else

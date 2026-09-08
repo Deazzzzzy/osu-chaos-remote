@@ -30,6 +30,8 @@ class ModernControlPanel:
         self.inv_y = False
         self.jam_k1 = False
         self.jam_k2 = False
+        self.cs_min_val = 0.40
+        self.cs_max_val = 1.70
 
         style = ttk.Style()
         style.theme_use("clam")
@@ -429,7 +431,7 @@ class ModernControlPanel:
         # --- СЕКЦИЯ: ПЬЯНАЯ КАМЕРА & ТРЯСКА ЭКРАНА (НОВОЕ В ФАЗЕ 4) ---
         cam_frame = tk.Frame(tab2, bg=self.panel_color, padx=15, pady=12)
         cam_frame.pack(fill=tk.X, pady=5)
-        self.cam_header = tk.Label(cam_frame, text="ПЬЯНАЯ КАМЕРА & ТРЯСКА ЭКРАНА", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
+        self.cam_header = tk.Label(cam_frame, text="ПЬЯНАЯ КАМЕРА & ВРАЩЕНИЕ ЭКРАНА", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
         self.cam_header.pack(anchor=tk.W, pady=(0, 4))
 
         row_drunk = tk.Frame(cam_frame, bg=self.panel_color)
@@ -438,13 +440,6 @@ class ModernControlPanel:
         self.lbl_drunk.pack(side=tk.LEFT)
         tk.Button(row_drunk, text="ВКЛЮЧИТЬ 🍾", font=("Segoe UI", 9, "bold"), bg=self.accent_yellow, fg="#11111b", bd=0, command=lambda: self.send_command("DRUNK_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
         tk.Button(row_drunk, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("DRUNK_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-
-        row_shake = tk.Frame(cam_frame, bg=self.panel_color)
-        row_shake.pack(fill=tk.X, pady=2)
-        self.lbl_shake = tk.Label(row_shake, text="Тряска экрана (Землетряс):", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=26, anchor=tk.W)
-        self.lbl_shake.pack(side=tk.LEFT)
-        tk.Button(row_shake, text="ВКЛЮЧИТЬ 🌋", font=("Segoe UI", 9, "bold"), bg=self.accent_earth, fg="#11111b", bd=0, command=lambda: self.send_command("SHAKE_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(row_shake, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("SHAKE_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
 
         # Фаза 5: Бочка 360° и Троттлинг 15 FPS
         row_barrel = tk.Frame(cam_frame, bg=self.panel_color)
@@ -499,6 +494,31 @@ class ModernControlPanel:
         tk.Label(row_cs_chaos, text="Гигантизм vs Микро-ноты (CS):", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=26, anchor=tk.W).pack(side=tk.LEFT)
         tk.Button(row_cs_chaos, text="ХАОС РАЗМЕРОВ 🎯", font=("Segoe UI", 9, "bold"), bg=self.accent_on, fg="#11111b", bd=0, command=lambda: self.send_command("CS_CHAOS_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
         tk.Button(row_cs_chaos, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("CS_CHAOS_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+
+        # Настройка диапазона масштаба (Микро / Гигантизм)
+        cs_range_frame = tk.Frame(vis_frame, bg=self.bg_color, padx=10, pady=6, bd=1, relief=tk.SOLID)
+        cs_range_frame.pack(fill=tk.X, pady=(2, 6))
+
+        self.lbl_cs_range = tk.Label(cs_range_frame, text="Диапазон: Микро 0.40x  |  Гигантизм 1.70x", font=("Segoe UI", 9, "bold"), bg=self.bg_color, fg=self.accent_yellow)
+        self.lbl_cs_range.pack(anchor=tk.W, pady=(0, 4))
+
+        row_cs_min = tk.Frame(cs_range_frame, bg=self.bg_color)
+        row_cs_min.pack(fill=tk.X, pady=1)
+        tk.Label(row_cs_min, text="Микро (Min):", font=("Segoe UI", 8, "bold"), bg=self.bg_color, fg=self.text_color, width=12, anchor=tk.W).pack(side=tk.LEFT)
+        self.cs_min_slider = ttk.Scale(row_cs_min, from_=0.08, to=1.00, value=0.40, orient=tk.HORIZONTAL, command=self.on_cs_min_slider)
+        self.cs_min_slider.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
+
+        row_cs_max = tk.Frame(cs_range_frame, bg=self.bg_color)
+        row_cs_max.pack(fill=tk.X, pady=1)
+        tk.Label(row_cs_max, text="Макро (Max):", font=("Segoe UI", 8, "bold"), bg=self.bg_color, fg=self.text_color, width=12, anchor=tk.W).pack(side=tk.LEFT)
+        self.cs_max_slider = ttk.Scale(row_cs_max, from_=1.00, to=3.50, value=1.70, orient=tk.HORIZONTAL, command=self.on_cs_max_slider)
+        self.cs_max_slider.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
+
+        cs_presets_row = tk.Frame(cs_range_frame, bg=self.bg_color)
+        cs_presets_row.pack(fill=tk.X, pady=(4, 0))
+        tk.Button(cs_presets_row, text="Обычный (0.4x/1.7x)", font=("Segoe UI", 8, "bold"), bg=self.panel_color, fg=self.text_color, bd=0, command=lambda: self.set_cs_range(0.40, 1.70)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
+        tk.Button(cs_presets_row, text="Дикий (0.25x/2.3x)", font=("Segoe UI", 8, "bold"), bg=self.panel_color, fg="#fab387", bd=0, command=lambda: self.set_cs_range(0.25, 2.30)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
+        tk.Button(cs_presets_row, text="Экстрим (0.12x/3.2x)", font=("Segoe UI", 8, "bold"), bg=self.panel_color, fg=self.accent_on, bd=0, command=lambda: self.set_cs_range(0.12, 3.20)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
 
         row_mosaic = tk.Frame(vis_frame, bg=self.panel_color)
         row_mosaic.pack(fill=tk.X, pady=2)
@@ -959,10 +979,6 @@ class ModernControlPanel:
             self.lbl_drunk.config(text="Пьяная камера (КАЧКА 🟢):", fg=self.accent_yellow)
         elif command == "DRUNK_OFF":
             self.lbl_drunk.config(text="Пьяная камера (Качка ±15°):", fg=self.text_color)
-        elif command == "SHAKE_ON":
-            self.lbl_shake.config(text="Тряска экрана (ТРЯСЕТ 🟢):", fg=self.accent_earth)
-        elif command == "SHAKE_OFF":
-            self.lbl_shake.config(text="Тряска экрана (Землетряс):", fg=self.text_color)
         elif command == "TUNNEL_ON":
             self.lbl_tunnel.config(text="Туннельное зрение (ФОНАРИК 🟢):", fg=self.accent_cyan)
         elif command == "TUNNEL_OFF":
@@ -1155,6 +1171,27 @@ class ModernControlPanel:
     def apply_fps_slider(self):
         fps_int = int(self.fps_slider.get())
         self.set_fps_target(fps_int)
+
+    def on_cs_min_slider(self, val):
+        self.cs_min_val = float(val)
+        self._update_cs_range_ui()
+        self.send_command(f"CS_CHAOS_MIN:{self.cs_min_val:.2f}")
+
+    def on_cs_max_slider(self, val):
+        self.cs_max_val = float(val)
+        self._update_cs_range_ui()
+        self.send_command(f"CS_CHAOS_MAX:{self.cs_max_val:.2f}")
+
+    def set_cs_range(self, min_val, max_val):
+        self.cs_min_val = min_val
+        self.cs_max_val = max_val
+        self.cs_min_slider.set(min_val)
+        self.cs_max_slider.set(max_val)
+        self._update_cs_range_ui()
+        self.send_command(f"CS_CHAOS_RANGE:{min_val:.2f}:{max_val:.2f}")
+
+    def _update_cs_range_ui(self):
+        self.lbl_cs_range.config(text=f"Диапазон: Микро {self.cs_min_val:.2f}x  |  Гигантизм {self.cs_max_val:.2f}x")
 
 
 
