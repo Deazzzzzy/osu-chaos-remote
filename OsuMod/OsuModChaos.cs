@@ -521,9 +521,16 @@ namespace osu.Game.Rulesets.Osu.Mods
                                 else if (msg.StartsWith("SET_NOTIF_VOLUME:") || msg.StartsWith("NOTIF_VOLUME:"))
                                 {
                                     string valStr = msg.Substring(msg.IndexOf(':') + 1);
+                                    int endIdx = 0;
+                                    while (endIdx < valStr.Length && (char.IsDigit(valStr[endIdx]) || valStr[endIdx] == '.' || valStr[endIdx] == '-'))
+                                        endIdx++;
+                                    if (endIdx > 0)
+                                        valStr = valStr.Substring(0, endIdx);
+
                                     if (float.TryParse(valStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float nvol))
                                     {
                                         NotificationVolume = Math.Clamp(nvol, 0f, 2.0f);
+                                        TrollOverlay.ApplyGlobalNotificationVolume(NotificationVolume);
                                     }
                                 }
                                 else if (msg.StartsWith("SET_FPS:") || msg.StartsWith("FPS:"))
@@ -532,6 +539,7 @@ namespace osu.Game.Rulesets.Osu.Mods
                                     if (int.TryParse(valStr, out int fpsVal))
                                     {
                                         TargetFps = Math.Max(0, fpsVal);
+                                        TrollOverlay.ActiveInstance?.ApplyFpsLimit(TargetFps);
                                     }
                                 }
                                 else if (msg == "TAPE_STOP") TriggerTapeStop = true;

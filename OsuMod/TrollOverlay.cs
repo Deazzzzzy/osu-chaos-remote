@@ -61,8 +61,11 @@ namespace osu.Game.Rulesets.Osu.Mods
         private SpriteIcon? updateSpinnerIcon;
         private readonly Random rnd = new Random();
 
+        public static TrollOverlay? ActiveInstance { get; private set; }
+
         private osu.Framework.Audio.Sample.Sample? popInSample;
         private osu.Framework.Audio.Sample.Sample? combobreakSample;
+        private readonly List<ITrackStore> customTrackStores = new List<ITrackStore>();
         private ITrack? discordTrack;
         private static string? localAudioPath;
         private ITrack? telegramTrack;
@@ -81,6 +84,7 @@ namespace osu.Game.Rulesets.Osu.Mods
         {
             this.host = host;
             OsuModChaos.GameHostInstance = host;
+            ActiveInstance = this;
 
             popInSample = audio.Samples.Get("UI/overlay-pop-in");
             combobreakSample = audio.Samples.Get("Gameplay/combobreak");
@@ -130,7 +134,7 @@ namespace osu.Game.Rulesets.Osu.Mods
             InternalChildren = children.ToArray();
         }
 
-        private static ITrack? loadSingleTrack(osu.Framework.Audio.AudioManager audio, string resourceName, string diskFilename, ref string? outLocalPath, bool looping)
+        private ITrack? loadSingleTrack(osu.Framework.Audio.AudioManager audio, string resourceName, string diskFilename, ref string? outLocalPath, bool looping)
         {
             try
             {
@@ -158,6 +162,7 @@ namespace osu.Game.Rulesets.Osu.Mods
 
                     var store = new SingleFileResourceStore(diskFilename, audioBytes);
                     var trackStore = audio.GetTrackStore(store);
+                    customTrackStores.Add(trackStore);
                     var track = trackStore.Get(diskFilename);
                     if (track != null)
                     {
@@ -565,7 +570,8 @@ namespace osu.Game.Rulesets.Osu.Mods
             {
                 try
                 {
-                    discordTrack.Volume.Value = Math.Clamp(OsuModChaos.NotificationVolume, 0f, 1.0f);
+                    float bassVol = Math.Clamp(OsuModChaos.NotificationVolume / 2.0f, 0f, 1.0f);
+                    discordTrack.Volume.Value = bassVol;
                     discordTrack.Seek(0);
                     discordTrack.Start();
                     played = true;
@@ -573,7 +579,7 @@ namespace osu.Game.Rulesets.Osu.Mods
                 catch { }
             }
 
-            if (OperatingSystem.IsWindows())
+            if (!played && OperatingSystem.IsWindows())
             {
                 try
                 {
@@ -582,9 +588,9 @@ namespace osu.Game.Rulesets.Osu.Mods
                     {
                         mciSendString("close disc_ring", null, 0, IntPtr.Zero);
                         mciSendString($"open \"{target}\" type mpegvideo alias disc_ring", null, 0, IntPtr.Zero);
-                        int mciVol = (int)Math.Clamp(OsuModChaos.NotificationVolume * 500f, 0, 1000);
-                        mciSendString($"setaudio disc_ring volume to {mciVol}", null, 0, IntPtr.Zero);
+                        int mciVol = (int)Math.Clamp((OsuModChaos.NotificationVolume / 2.0f) * 1000f, 0, 1000);
                         mciSendString("play disc_ring", null, 0, IntPtr.Zero);
+                        mciSendString($"setaudio disc_ring volume to {mciVol}", null, 0, IntPtr.Zero);
                         played = true;
                     }
                 }
@@ -645,7 +651,8 @@ namespace osu.Game.Rulesets.Osu.Mods
             {
                 try
                 {
-                    telegramTrack.Volume.Value = Math.Clamp(OsuModChaos.NotificationVolume, 0f, 1.0f);
+                    float bassVol = Math.Clamp(OsuModChaos.NotificationVolume / 2.0f, 0f, 1.0f);
+                    telegramTrack.Volume.Value = bassVol;
                     telegramTrack.Seek(0);
                     telegramTrack.Start();
                     played = true;
@@ -653,7 +660,7 @@ namespace osu.Game.Rulesets.Osu.Mods
                 catch { }
             }
 
-            if (OperatingSystem.IsWindows())
+            if (!played && OperatingSystem.IsWindows())
             {
                 try
                 {
@@ -662,9 +669,9 @@ namespace osu.Game.Rulesets.Osu.Mods
                     {
                         mciSendString("close tg_ring", null, 0, IntPtr.Zero);
                         mciSendString($"open \"{target}\" type mpegvideo alias tg_ring", null, 0, IntPtr.Zero);
-                        int mciVol = (int)Math.Clamp(OsuModChaos.NotificationVolume * 500f, 0, 1000);
-                        mciSendString($"setaudio tg_ring volume to {mciVol}", null, 0, IntPtr.Zero);
+                        int mciVol = (int)Math.Clamp((OsuModChaos.NotificationVolume / 2.0f) * 1000f, 0, 1000);
                         mciSendString("play tg_ring", null, 0, IntPtr.Zero);
+                        mciSendString($"setaudio tg_ring volume to {mciVol}", null, 0, IntPtr.Zero);
                         played = true;
                     }
                 }
@@ -725,7 +732,8 @@ namespace osu.Game.Rulesets.Osu.Mods
             {
                 try
                 {
-                    steamTrack.Volume.Value = Math.Clamp(OsuModChaos.NotificationVolume, 0f, 1.0f);
+                    float bassVol = Math.Clamp(OsuModChaos.NotificationVolume / 2.0f, 0f, 1.0f);
+                    steamTrack.Volume.Value = bassVol;
                     steamTrack.Seek(0);
                     steamTrack.Start();
                     played = true;
@@ -733,7 +741,7 @@ namespace osu.Game.Rulesets.Osu.Mods
                 catch { }
             }
 
-            if (OperatingSystem.IsWindows())
+            if (!played && OperatingSystem.IsWindows())
             {
                 try
                 {
@@ -742,9 +750,9 @@ namespace osu.Game.Rulesets.Osu.Mods
                     {
                         mciSendString("close steam_msg", null, 0, IntPtr.Zero);
                         mciSendString($"open \"{target}\" type mpegvideo alias steam_msg", null, 0, IntPtr.Zero);
-                        int mciVol = (int)Math.Clamp(OsuModChaos.NotificationVolume * 500f, 0, 1000);
-                        mciSendString($"setaudio steam_msg volume to {mciVol}", null, 0, IntPtr.Zero);
+                        int mciVol = (int)Math.Clamp((OsuModChaos.NotificationVolume / 2.0f) * 1000f, 0, 1000);
                         mciSendString("play steam_msg", null, 0, IntPtr.Zero);
+                        mciSendString($"setaudio steam_msg volume to {mciVol}", null, 0, IntPtr.Zero);
                         played = true;
                     }
                 }
@@ -834,13 +842,14 @@ namespace osu.Game.Rulesets.Osu.Mods
 
         public void UpdateNotificationVolume(float vol)
         {
-            if (discordTrack != null) discordTrack.Volume.Value = Math.Clamp(vol, 0f, 1.0f);
-            if (telegramTrack != null) telegramTrack.Volume.Value = Math.Clamp(vol, 0f, 1.0f);
-            if (steamTrack != null) steamTrack.Volume.Value = Math.Clamp(vol, 0f, 1.0f);
+            float bassVol = Math.Clamp(vol / 2.0f, 0f, 1.0f);
+            if (discordTrack != null) discordTrack.Volume.Value = bassVol;
+            if (telegramTrack != null) telegramTrack.Volume.Value = bassVol;
+            if (steamTrack != null) steamTrack.Volume.Value = bassVol;
 
             if (OperatingSystem.IsWindows())
             {
-                int mciVol = (int)Math.Clamp(vol * 500f, 0, 1000);
+                int mciVol = (int)Math.Clamp(bassVol * 1000f, 0, 1000);
                 try
                 {
                     mciSendString($"setaudio disc_ring volume to {mciVol}", null, 0, IntPtr.Zero);
@@ -851,13 +860,22 @@ namespace osu.Game.Rulesets.Osu.Mods
             }
         }
 
+        public static void ApplyGlobalNotificationVolume(float vol)
+        {
+            ActiveInstance?.UpdateNotificationVolume(vol);
+        }
+
         protected override void Dispose(bool isDisposing)
         {
+            if (ActiveInstance == this)
+                ActiveInstance = null;
+
             if (host != null && initialDrawHz > 0)
             {
                 host.DrawThread.ActiveHz = initialDrawHz;
                 host.UpdateThread.ActiveHz = initialUpdateHz;
             }
+
             base.Dispose(isDisposing);
         }
 
