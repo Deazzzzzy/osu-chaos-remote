@@ -574,7 +574,7 @@ class ModernControlPanel:
         # Фаза 6: Bass Boost / Ear Rape (Переключаемый)
         row_bass = tk.Frame(audio_frame, bg=self.panel_color)
         row_bass.pack(fill=tk.X, pady=2)
-        tk.Label(row_bass, text="Bass Boost / Ear Rape:", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=26, anchor=tk.W)
+        self.lbl_bass = tk.Label(row_bass, text="Bass Boost / Ear Rape:", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=26, anchor=tk.W)
         self.lbl_bass.pack(side=tk.LEFT)
         tk.Button(row_bass, text="ВКЛЮЧИТЬ БАС 📢", font=("Segoe UI", 9, "bold"), bg=self.accent_on, fg="#11111b", bd=0, command=lambda: self.send_command("BASS_BOOST_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
         tk.Button(row_bass, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("BASS_BOOST_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
