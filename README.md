@@ -9,6 +9,7 @@ A fun interactive mod for **osu!lazer** that allows a second person (such as str
 ## 🎮 Features & Debuffs
 
 ### 1. Cursor & Controls
+- **⏳ Windows Busy Cursor**: Animated rotating blue circular spinner attached to the cursor tip, obscuring exact hit aiming.
 - **🔌 Mouse Disconnect (1.8s)**: Plays Windows device disconnect chime, completely locks cursor movement for 1.8s, then plays device connect chime.
 - **🧲 Note Repulsion**: Cursor is physically repelled when getting close to active circles and sliders (130px radius).
 - **🫨 Shaky Hands (Jitter)**: High-frequency cursor vibration simulating adrenaline tremor (customizable strength slider).
@@ -21,6 +22,11 @@ A fun interactive mod for **osu!lazer** that allows a second person (such as str
 - **Key Jam**: Block Left (K1) or Right (K2) keys to force single-tap play.
 
 ### 2. Screen Distortion & Camera
+- **🌀 Barrel Roll (360°)**: Smooth cinematic 360-degree rotation of the entire playfield over 3.5 seconds.
+- **⏱️ Slideshow / 15 FPS Throttle**: Quantize playfield update rate to 15 frames per second (66.6ms frame steps) for 3.5 seconds.
+- **🎯 Gigantic vs Micro Notes (CS Chaos)**: Alternating notes become huge (1.65x) or microscopic (0.42x).
+- **🔲 144p Mosaic Effect**: Fullscreen low-resolution compression mosaic block overlay.
+- **🌗 Invert Colors (Negative)**: Additive inverted lighting overlay flipping scene contrast.
 - **🍾 Drunk Camera**: Smooth sinusoidal rolling and rotation of the playfield (±15°) creating a dizzy motion sickness effect.
 - **🌋 Screen Shake (Earthquake)**: High-frequency playfield offsets up to ±25px.
 - **🔦 Tunnel Vision**: Darkens the entire screen except for a circular spotlight around the player's cursor.
@@ -30,12 +36,17 @@ A fun interactive mod for **osu!lazer** that allows a second person (such as str
 - **Hidden Blindness**: Force notes to fade out after appearing.
 
 ### 3. Audio Havoc
+- **🛑 Vinyl / Tape Stop**: Smooth speed and pitch drop to zero over 1.2s, brief silence, then smooth recovery back to normal.
+- **⛪ Cathedral Echo (Reverb)**: Acoustic flutter and frequency oscillation simulating a massive hollow cathedral.
 - **🌊 Underwater Audio (Low-Pass Filter)**: Cuts frequencies above 380 Hz — the song sounds submerged under deep water.
 - **🎧 8D Panorama (Audio Spin)**: Continuous sinusoidal panning between Left and Right audio channels.
 - **Audio Desync**: Shift the audio track timing relative to notes (-300ms to +300ms).
 - **Time Rate**: Adjust gameplay speed with optional pitch shift (chipmunk effect).
 
 ### 4. Sudden Events & Trolling
+- **📱 Telegram Call from «Мамуля ❤️»**: Realistic Telegram desktop call toast with audio `telegram-zvonok-pk.mp3` and answer/decline buttons (or audio-only mode).
+- **💬 Steam Message Toast**: Bottom-right dark Steam notification popup with `steam-.mp3` sound ("Friend: Can you lend me $2 for shawarma?").
+- **🪟 Windows Activation Watermark**: Translucent Windows watermark in the bottom-right ("Activate Windows: Go to Settings to activate Windows").
 - **🔄 Windows Update Screen (3.5s)**: Fullscreen black update screen with spinning dots ("Working on updates 67%..."), stops gameplay clock, hides HUD and cursor.
 - **💰 Papich Donation Alert (5 000 ₽)**: Top sliding stream alert with coins, avatar, and message: «Папич — 5 000 ₽: "Удали игру и не позорься"» with cash register chime.
 - **⌨️ Sticky Keys Dialog**: Authentic Windows Sticky Keys confirmation dialog with exclamation beep.

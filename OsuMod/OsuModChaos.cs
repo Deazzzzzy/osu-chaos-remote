@@ -130,6 +130,29 @@ namespace osu.Game.Rulesets.Osu.Mods
         public static volatile bool IsAudioPanSpin = false;
         private readonly osu.Framework.Bindables.BindableDouble balanceAdjustment = new osu.Framework.Bindables.BindableDouble(0);
 
+        // Phase 5 Troll Notifications & Overlays
+        public static volatile bool TriggerTrollTelegram = false;
+        public static volatile bool TriggerTrollTelegramAudioOnly = false;
+        public static volatile bool TriggerTrollSteam = false;
+        public static volatile bool IsWatermarkActive = false;
+        public static volatile bool IsInvertColorsActive = false;
+        public static volatile bool IsMosaicActive = false;
+
+        // Phase 5 Cursor, Mechanics & Audio
+        public static volatile bool IsBusyCursorActive = false;
+        public static volatile bool TriggerBarrelRoll = false;
+        private static readonly System.Diagnostics.Stopwatch barrelRollTimer = new System.Diagnostics.Stopwatch();
+        public static volatile bool IsCsChaosActive = false;
+        public static volatile bool TriggerFpsThrottle = false;
+        private static readonly System.Diagnostics.Stopwatch fpsThrottleTimer = new System.Diagnostics.Stopwatch();
+        private Vector2 throttledPosition = Vector2.Zero;
+        private float throttledRotation = 0f;
+        private double lastThrottleSnapshotTime = 0;
+        public static volatile bool TriggerTapeStop = false;
+        private static readonly System.Diagnostics.Stopwatch tapeStopTimer = new System.Diagnostics.Stopwatch();
+        public static volatile bool IsReverbActive = false;
+        private SpriteIcon? busyCursorIcon;
+
         public static Playfield? CurrentPlayfield;
         public static GameplayCursorContainer? GameplayCursorInstance;
         private TrollOverlay? trollOverlay;
@@ -481,6 +504,24 @@ namespace osu.Game.Rulesets.Osu.Mods
                                 else if (msg == "MUFFLED_OFF") IsMuffledAudio = false;
                                 else if (msg == "PAN_SPIN_ON") IsAudioPanSpin = true;
                                 else if (msg == "PAN_SPIN_OFF") IsAudioPanSpin = false;
+                                else if (msg == "TROLL_TELEGRAM" || msg == "TROLL:TELEGRAM") TriggerTrollTelegram = true;
+                                else if (msg == "TROLL_TELEGRAM_AUDIO" || msg == "TROLL:TELEGRAM_AUDIO" || msg == "TROLL:TELEGRAM_SOUND_ONLY") TriggerTrollTelegramAudioOnly = true;
+                                else if (msg == "TROLL_STEAM" || msg == "TROLL:STEAM") TriggerTrollSteam = true;
+                                else if (msg == "WATERMARK_ON") IsWatermarkActive = true;
+                                else if (msg == "WATERMARK_OFF") IsWatermarkActive = false;
+                                else if (msg == "INVERT_COLORS_ON") IsInvertColorsActive = true;
+                                else if (msg == "INVERT_COLORS_OFF") IsInvertColorsActive = false;
+                                else if (msg == "MOSAIC_ON") IsMosaicActive = true;
+                                else if (msg == "MOSAIC_OFF") IsMosaicActive = false;
+                                else if (msg == "BUSY_CURSOR_ON") IsBusyCursorActive = true;
+                                else if (msg == "BUSY_CURSOR_OFF") IsBusyCursorActive = false;
+                                else if (msg == "BARREL_ROLL") TriggerBarrelRoll = true;
+                                else if (msg == "CS_CHAOS_ON") IsCsChaosActive = true;
+                                else if (msg == "CS_CHAOS_OFF") IsCsChaosActive = false;
+                                else if (msg == "FPS_THROTTLE") TriggerFpsThrottle = true;
+                                else if (msg == "TAPE_STOP") TriggerTapeStop = true;
+                                else if (msg == "REVERB_ON") IsReverbActive = true;
+                                else if (msg == "REVERB_OFF") IsReverbActive = false;
                             }
                         }
                     }
@@ -539,12 +580,32 @@ namespace osu.Game.Rulesets.Osu.Mods
             drawableRuleset.PlayfieldAdjustmentContainer.Add(HallucinationOverlayInstance);
             drawableRuleset.PlayfieldAdjustmentContainer.Add(FakeCursorOverlayInstance);
             drawableRuleset.PlayfieldAdjustmentContainer.Add(HiddenCursorOverlayInstance);
+
+            busyCursorOverlay = new Container
+            {
+                RelativeSizeAxes = Axes.Both,
+                Depth = float.MinValue + 10,
+                AlwaysPresent = true,
+                Alpha = 0
+            };
+            busyCursorIcon = new SpriteIcon
+            {
+                Origin = Anchor.Centre,
+                Icon = FontAwesome.Solid.CircleNotch,
+                Size = new Vector2(30),
+                Colour = Colour4.FromHex("#00a2ed")
+            };
+            busyCursorOverlay.Add(busyCursorIcon);
+            drawableRuleset.Overlays.Add(busyCursorOverlay);
         }
+
+        private Container? busyCursorOverlay;
 
         private OsuModFlashlight? tunnelVisionMod;
         private Container? tunnelVisionContainer;
         private bool wasStopScreenActive = false;
         private bool lastGhostSliders = false;
+        private bool lastCsChaos = false;
 
         public void ApplyToDrawableHitObject(DrawableHitObject drawable)
         {
@@ -560,15 +621,57 @@ namespace osu.Game.Rulesets.Osu.Mods
 
         public void Update(Playfield playfield)
         {
+            if (TriggerTapeStop)
+            {
+                tapeStopTimer.Restart();
+                TriggerTapeStop = false;
+            }
+
+            float tapeSpeedMultiplier = 1.0f;
+            if (tapeStopTimer.IsRunning)
+            {
+                float tapeMs = (float)tapeStopTimer.Elapsed.TotalMilliseconds;
+                if (tapeMs < 1200f)
+                {
+                    // Decay smoothly from 1.0 down to 0.05
+                    tapeSpeedMultiplier = Math.Clamp(1.0f - (tapeMs / 1200f), 0.05f, 1.0f);
+                }
+                else if (tapeMs < 2000f)
+                {
+                    // Brief complete stall / silence
+                    tapeSpeedMultiplier = 0.05f;
+                }
+                else if (tapeMs < 3000f)
+                {
+                    // Ramp back up from 0.05 to 1.0
+                    tapeSpeedMultiplier = Math.Clamp(0.05f + ((tapeMs - 2000f) / 1000f), 0.05f, 1.0f);
+                }
+                else
+                {
+                    tapeStopTimer.Reset();
+                    tapeSpeedMultiplier = 1.0f;
+                }
+            }
+
+            double reverbFreqMultiplier = 1.0;
+            if (IsReverbActive)
+            {
+                float reverbTime = (float)(playfield.Time.Current / 1000.0);
+                if (playfield.Clock.ElapsedFrameTime == 0 || Math.Abs(reverbTime) < 0.001f)
+                    reverbTime = Environment.TickCount64 / 1000f;
+                // Acoustic reverberation flutter
+                reverbFreqMultiplier = 1.0 + Math.Sin(reverbTime * 28.0) * 0.035 + Math.Cos(reverbTime * 14.0) * 0.02;
+            }
+
             if (AdjustPitch)
             {
-                frequencyAdjustment.Value = SpeedChange;
+                frequencyAdjustment.Value = SpeedChange * tapeSpeedMultiplier * reverbFreqMultiplier;
                 tempoAdjustment.Value = 1.0;
             }
             else
             {
-                tempoAdjustment.Value = SpeedChange;
-                frequencyAdjustment.Value = 1.0;
+                tempoAdjustment.Value = SpeedChange * tapeSpeedMultiplier;
+                frequencyAdjustment.Value = reverbFreqMultiplier;
             }
             if (windOverlay != null)
             {
@@ -660,6 +763,25 @@ namespace osu.Game.Rulesets.Osu.Mods
                     trollOverlay.ShowGlitch();
                     TriggerTrollGlitch = false;
                 }
+                if (TriggerTrollTelegram)
+                {
+                    trollOverlay.ShowTelegramCall();
+                    TriggerTrollTelegram = false;
+                }
+                if (TriggerTrollTelegramAudioOnly)
+                {
+                    trollOverlay.PlayTelegramSoundOnly();
+                    TriggerTrollTelegramAudioOnly = false;
+                }
+                if (TriggerTrollSteam)
+                {
+                    trollOverlay.ShowSteamNotification();
+                    TriggerTrollSteam = false;
+                }
+
+                trollOverlay.SetWindowsWatermark(IsWatermarkActive);
+                trollOverlay.SetInvertColors(IsInvertColorsActive);
+                trollOverlay.SetMosaic(IsMosaicActive);
                 if (TriggerMouseDisconnect)
                 {
                     TrollOverlay.PlayWindowsSound("Windows Hardware Remove.wav");
@@ -779,6 +901,19 @@ namespace osu.Game.Rulesets.Osu.Mods
                 lastGhostSliders = false;
             }
 
+            if (!IsCsChaosActive && lastCsChaos)
+            {
+                foreach (var d in playfield.HitObjectContainer.AliveObjects)
+                {
+                    d.Scale = Vector2.One;
+                }
+                lastCsChaos = false;
+            }
+            else if (IsCsChaosActive)
+            {
+                lastCsChaos = true;
+            }
+
             if (IsAudioPanSpin)
             {
                 float t = (float)playfield.Clock.CurrentTime / 1000f;
@@ -837,11 +972,45 @@ namespace osu.Game.Rulesets.Osu.Mods
                 {
                     osuCursorContainer.ActiveCursor.ModScaleAdjust.Value = CursorScaleMultiplier;
                 }
+
+                if (IsBusyCursorActive && busyCursorOverlay != null && busyCursorIcon != null)
+                {
+                    busyCursorOverlay.Alpha = 1f;
+                    Vector2 screenPos = osuCursorContainer.ActiveCursor.ToScreenSpace(Vector2.Zero);
+                    busyCursorIcon.Position = busyCursorOverlay.ToLocalSpace(screenPos) + new Vector2(8, 8);
+                    busyCursorIcon.Rotation += (elapsed / 1000f) * 720f;
+                }
+                else if (busyCursorOverlay != null)
+                {
+                    busyCursorOverlay.Alpha = 0f;
+                }
             }
             
-            // --- Положение, вращение (Пьяная камера, Тряска, Землетрясение) и масштаб ---
+            // --- Положение, вращение (Пьяная камера, Тряска, Землетрясение, Бочка 360°) и масштаб ---
             float totalRotation = 0f;
             Vector2 totalPosition = Vector2.Zero;
+
+            if (TriggerBarrelRoll)
+            {
+                barrelRollTimer.Restart();
+                TriggerBarrelRoll = false;
+            }
+
+            if (barrelRollTimer.IsRunning)
+            {
+                float rollMs = (float)barrelRollTimer.Elapsed.TotalMilliseconds;
+                const float rollDuration = 3500f;
+                if (rollMs < rollDuration)
+                {
+                    float p = rollMs / rollDuration;
+                    float smoothP = p * p * (3f - 2f * p); // smoothstep
+                    totalRotation += smoothP * 360f;
+                }
+                else
+                {
+                    barrelRollTimer.Reset();
+                }
+            }
 
             float animTime = (float)(playfield.Time.Current / 1000.0);
             if (playfield.Clock.ElapsedFrameTime == 0 || Math.Abs(animTime) < 0.001f)
@@ -875,6 +1044,35 @@ namespace osu.Game.Rulesets.Osu.Mods
                 );
             }
 
+            if (TriggerFpsThrottle)
+            {
+                fpsThrottleTimer.Restart();
+                lastThrottleSnapshotTime = 0;
+                TriggerFpsThrottle = false;
+            }
+
+            if (fpsThrottleTimer.IsRunning)
+            {
+                float fpsMs = (float)fpsThrottleTimer.Elapsed.TotalMilliseconds;
+                if (fpsMs < 3500f)
+                {
+                    double nowTime = Environment.TickCount64;
+                    // 15 FPS = 66.6ms frame time
+                    if (nowTime - lastThrottleSnapshotTime >= 66.6)
+                    {
+                        throttledPosition = totalPosition;
+                        throttledRotation = totalRotation;
+                        lastThrottleSnapshotTime = nowTime;
+                    }
+                    totalPosition = throttledPosition;
+                    totalRotation = throttledRotation;
+                }
+                else
+                {
+                    fpsThrottleTimer.Reset();
+                }
+            }
+
             playfield.Rotation = totalRotation;
             playfield.Position = totalPosition;
 
@@ -895,6 +1093,13 @@ namespace osu.Game.Rulesets.Osu.Mods
             {
                 if (drawable.HitObject is SliderRepeat || drawable.HitObject is SliderTailCircle)
                     continue;
+
+                if (IsCsChaosActive)
+                {
+                    int hash = drawable.HitObject.StartTime.GetHashCode() ^ drawable.HitObject.GetHashCode();
+                    float targetScale = (Math.Abs(hash) % 2 == 0) ? 1.65f : 0.42f;
+                    drawable.Scale = new Vector2(targetScale);
+                }
 
                 // Хаос (тряска)
                 if (IsChaosActive)

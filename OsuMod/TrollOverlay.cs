@@ -42,6 +42,12 @@ namespace osu.Game.Rulesets.Osu.Mods
         private Container donationToast = null!;
         private Container stickyKeysDialog = null!;
         private Container glitchContainer = null!;
+        private Container telegramToast = null!;
+        private Container steamToast = null!;
+        private Container windowsWatermarkContainer = null!;
+        private Container invertColorsContainer = null!;
+        private Container mosaicContainer = null!;
+
         private readonly List<Box> glitchSlices = new List<Box>();
         private osu.Game.Audio.Effects.AudioFilter? lowPassFilter;
         private SpriteIcon? updateSpinnerIcon;
@@ -51,6 +57,10 @@ namespace osu.Game.Rulesets.Osu.Mods
         private osu.Framework.Audio.Sample.Sample? combobreakSample;
         private ITrack? discordTrack;
         private static string? localAudioPath;
+        private ITrack? telegramTrack;
+        private static string? localTelegramAudioPath;
+        private ITrack? steamTrack;
+        private static string? localSteamAudioPath;
 
         public TrollOverlay()
         {
@@ -64,40 +74,9 @@ namespace osu.Game.Rulesets.Osu.Mods
             popInSample = audio.Samples.Get("UI/overlay-pop-in");
             combobreakSample = audio.Samples.Get("Gameplay/combobreak");
 
-            try
-            {
-                byte[]? audioBytes = null;
-                var asm = typeof(TrollOverlay).Assembly;
-                using (var stream = asm.GetManifestResourceStream("call_calling.mp3"))
-                {
-                    if (stream != null)
-                    {
-                        audioBytes = new byte[stream.Length];
-                        stream.ReadExactly(audioBytes, 0, audioBytes.Length);
-                    }
-                }
-
-                string diskPath = @"C:\Users\dizzy\Downloads\Osu_Debuffs\osu\osu.Game.Rulesets.Osu\Mods\call_calling.mp3";
-                if (audioBytes == null && File.Exists(diskPath))
-                {
-                    audioBytes = File.ReadAllBytes(diskPath);
-                }
-
-                if (audioBytes != null)
-                {
-                    localAudioPath = Path.Combine(Path.GetTempPath(), "osu_discord_call.mp3");
-                    File.WriteAllBytes(localAudioPath, audioBytes);
-
-                    var store = new SingleFileResourceStore("call_calling.mp3", audioBytes);
-                    var trackStore = audio.GetTrackStore(store);
-                    discordTrack = trackStore.Get("call_calling.mp3");
-                    if (discordTrack != null)
-                    {
-                        discordTrack.Looping = true;
-                    }
-                }
-            }
-            catch { }
+            discordTrack = loadSingleTrack(audio, "call_calling.mp3", "call_calling.mp3", ref localAudioPath, true);
+            telegramTrack = loadSingleTrack(audio, "telegram-zvonok-pk.mp3", "telegram-zvonok-pk.mp3", ref localTelegramAudioPath, true);
+            steamTrack = loadSingleTrack(audio, "steam-.mp3", "steam-.mp3", ref localSteamAudioPath, false);
 
             bsodContainer = createBsodContainer();
             updateContainer = createWindowsUpdateContainer();
@@ -107,17 +86,27 @@ namespace osu.Game.Rulesets.Osu.Mods
             discordToast = createDiscordToast();
             donationToast = createDonationToast();
             stickyKeysDialog = createStickyKeysDialog();
+            telegramToast = createTelegramToast();
+            steamToast = createSteamToast();
+            windowsWatermarkContainer = createWindowsWatermark();
+            invertColorsContainer = createInvertColorsContainer();
+            mosaicContainer = createMosaicContainer();
 
             var children = new List<Drawable>
             {
+                mosaicContainer,
+                invertColorsContainer,
                 bsodContainer,
                 updateContainer,
                 glitchContainer,
                 defenderToast,
                 batteryToast,
                 discordToast,
+                telegramToast,
+                steamToast,
                 donationToast,
                 stickyKeysDialog,
+                windowsWatermarkContainer,
             };
 
             try
@@ -128,6 +117,46 @@ namespace osu.Game.Rulesets.Osu.Mods
             catch { }
 
             InternalChildren = children.ToArray();
+        }
+
+        private static ITrack? loadSingleTrack(osu.Framework.Audio.AudioManager audio, string resourceName, string diskFilename, ref string? outLocalPath, bool looping)
+        {
+            try
+            {
+                byte[]? audioBytes = null;
+                var asm = typeof(TrollOverlay).Assembly;
+                using (var stream = asm.GetManifestResourceStream(resourceName))
+                {
+                    if (stream != null)
+                    {
+                        audioBytes = new byte[stream.Length];
+                        stream.ReadExactly(audioBytes, 0, audioBytes.Length);
+                    }
+                }
+
+                string diskPath = Path.Combine(@"C:\Users\dizzy\Downloads\Osu_Debuffs\osu\osu.Game.Rulesets.Osu\Mods", diskFilename);
+                if (audioBytes == null && File.Exists(diskPath))
+                {
+                    audioBytes = File.ReadAllBytes(diskPath);
+                }
+
+                if (audioBytes != null)
+                {
+                    outLocalPath = Path.Combine(Path.GetTempPath(), "osu_" + diskFilename);
+                    File.WriteAllBytes(outLocalPath, audioBytes);
+
+                    var store = new SingleFileResourceStore(diskFilename, audioBytes);
+                    var trackStore = audio.GetTrackStore(store);
+                    var track = trackStore.Get(diskFilename);
+                    if (track != null)
+                    {
+                        track.Looping = looping;
+                    }
+                    return track;
+                }
+            }
+            catch { }
+            return null;
         }
 
         private Container createBatteryToast()
@@ -577,6 +606,182 @@ namespace osu.Game.Rulesets.Osu.Mods
                 .FadeOut(250);
         }
 
+        private void stopTelegramCallSound()
+        {
+            telegramTrack?.Stop();
+
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    mciSendString("stop tg_ring", null, 0, IntPtr.Zero);
+                    mciSendString("close tg_ring", null, 0, IntPtr.Zero);
+                }
+                catch { }
+            }
+        }
+
+        private void playTelegramAudio()
+        {
+            stopTelegramCallSound();
+
+            bool played = false;
+
+            if (telegramTrack != null)
+            {
+                try
+                {
+                    telegramTrack.Seek(0);
+                    telegramTrack.Start();
+                    played = true;
+                }
+                catch { }
+            }
+
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    string target = localTelegramAudioPath ?? @"C:\Users\dizzy\Downloads\Osu_Debuffs\osu\osu.Game.Rulesets.Osu\Mods\telegram-zvonok-pk.mp3";
+                    if (File.Exists(target))
+                    {
+                        mciSendString("close tg_ring", null, 0, IntPtr.Zero);
+                        mciSendString($"open \"{target}\" type mpegvideo alias tg_ring", null, 0, IntPtr.Zero);
+                        mciSendString("play tg_ring", null, 0, IntPtr.Zero);
+                        played = true;
+                    }
+                }
+                catch { }
+            }
+
+            if (!played)
+            {
+                playSystemSound(mb_iconasterisk);
+                popInSample?.Play();
+            }
+
+            Scheduler.AddDelayed(stopTelegramCallSound, 4500);
+        }
+
+        public void PlayTelegramSoundOnly()
+        {
+            playTelegramAudio();
+        }
+
+        public void ShowTelegramCall()
+        {
+            playTelegramAudio();
+
+            telegramToast.ClearTransforms();
+            telegramToast.Alpha = 0;
+            telegramToast.Y = -180;
+            telegramToast.FadeIn(150);
+            telegramToast.MoveToY(25, 300, Easing.OutBack);
+            telegramToast.RotateTo(1.5f, 70).Then().RotateTo(-1.5f, 70).Then().RotateTo(1.5f, 70).Then().RotateTo(0, 70)
+                .Delay(4000)
+                .MoveToY(-180, 250, Easing.InCubic)
+                .FadeOut(250);
+        }
+
+        private void stopSteamSound()
+        {
+            steamTrack?.Stop();
+
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    mciSendString("stop steam_msg", null, 0, IntPtr.Zero);
+                    mciSendString("close steam_msg", null, 0, IntPtr.Zero);
+                }
+                catch { }
+            }
+        }
+
+        private void playSteamAudio()
+        {
+            stopSteamSound();
+
+            bool played = false;
+
+            if (steamTrack != null)
+            {
+                try
+                {
+                    steamTrack.Seek(0);
+                    steamTrack.Start();
+                    played = true;
+                }
+                catch { }
+            }
+
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    string target = localSteamAudioPath ?? @"C:\Users\dizzy\Downloads\Osu_Debuffs\osu\osu.Game.Rulesets.Osu\Mods\steam-.mp3";
+                    if (File.Exists(target))
+                    {
+                        mciSendString("close steam_msg", null, 0, IntPtr.Zero);
+                        mciSendString($"open \"{target}\" type mpegvideo alias steam_msg", null, 0, IntPtr.Zero);
+                        mciSendString("play steam_msg", null, 0, IntPtr.Zero);
+                        played = true;
+                    }
+                }
+                catch { }
+            }
+
+            if (!played)
+            {
+                playSystemSound(mb_iconasterisk);
+                popInSample?.Play();
+            }
+
+            Scheduler.AddDelayed(stopSteamSound, 3000);
+        }
+
+        public void ShowSteamNotification()
+        {
+            playSteamAudio();
+
+            steamToast.ClearTransforms();
+            steamToast.Alpha = 0;
+            steamToast.X = 380;
+            steamToast.FadeIn(180);
+            steamToast.MoveToX(-25, 300, Easing.OutCubic)
+                .Delay(4200)
+                .MoveToX(380, 250, Easing.InCubic)
+                .FadeOut(250);
+        }
+
+        public void SetWindowsWatermark(bool active)
+        {
+            windowsWatermarkContainer.ClearTransforms();
+            if (active)
+                windowsWatermarkContainer.FadeTo(0.75f, 400, Easing.OutCubic);
+            else
+                windowsWatermarkContainer.FadeOut(300, Easing.InCubic);
+        }
+
+        public void SetInvertColors(bool active)
+        {
+            invertColorsContainer.ClearTransforms();
+            if (active)
+                invertColorsContainer.FadeTo(1f, 250, Easing.OutCubic);
+            else
+                invertColorsContainer.FadeOut(250, Easing.InCubic);
+        }
+
+        public void SetMosaic(bool active)
+        {
+            mosaicContainer.ClearTransforms();
+            if (active)
+                mosaicContainer.FadeTo(1f, 200, Easing.OutCubic);
+            else
+                mosaicContainer.FadeOut(200, Easing.InCubic);
+        }
+
+
         public void ShowDefenderAlert()
         {
             playSystemSound(mb_iconexclamation);
@@ -986,6 +1191,281 @@ namespace osu.Game.Rulesets.Osu.Mods
                     }
                 }
             };
+        }
+
+        private Container createTelegramToast()
+        {
+            return new Container
+            {
+                Anchor = Anchor.TopRight,
+                Origin = Anchor.TopRight,
+                Position = new Vector2(-25, 25),
+                Size = new Vector2(340, 140),
+                Masking = true,
+                CornerRadius = 12,
+                BorderThickness = 1,
+                BorderColour = Colour4.FromHex("#242f3d"),
+                Alpha = 0,
+                Children = new Drawable[]
+                {
+                    new Box
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Colour = Colour4.FromHex("#17212b")
+                    },
+                    new SpriteIcon
+                    {
+                        Icon = FontAwesome.Brands.TelegramPlane,
+                        Size = new Vector2(16),
+                        Colour = Colour4.FromHex("#29b6f6"),
+                        Position = new Vector2(16, 12)
+                    },
+                    new OsuSpriteText
+                    {
+                        Text = "TELEGRAM • Входящий звонок",
+                        Font = OsuFont.GetFont(size: 11, weight: FontWeight.Bold),
+                        Colour = Colour4.FromHex("#708499"),
+                        Position = new Vector2(38, 12)
+                    },
+                    new CircularContainer
+                    {
+                        Position = new Vector2(16, 38),
+                        Size = new Vector2(46),
+                        Masking = true,
+                        Children = new Drawable[]
+                        {
+                            new Box
+                            {
+                                RelativeSizeAxes = Axes.Both,
+                                Colour = Colour4.FromHex("#e91e63")
+                            },
+                            new SpriteIcon
+                            {
+                                Anchor = Anchor.Centre,
+                                Origin = Anchor.Centre,
+                                Icon = FontAwesome.Solid.Heart,
+                                Size = new Vector2(22),
+                                Colour = Colour4.White
+                            }
+                        }
+                    },
+                    new OsuSpriteText
+                    {
+                        Text = "Мамуля ❤️",
+                        Font = OsuFont.GetFont(size: 16, weight: FontWeight.Bold),
+                        Colour = Colour4.White,
+                        Position = new Vector2(72, 40)
+                    },
+                    new OsuSpriteText
+                    {
+                        Text = "Звонит по Telegram...",
+                        Font = OsuFont.GetFont(size: 12),
+                        Colour = Colour4.FromHex("#7e92a4"),
+                        Position = new Vector2(72, 62)
+                    },
+                    new CircularContainer
+                    {
+                        Position = new Vector2(220, 88),
+                        Size = new Vector2(36),
+                        Masking = true,
+                        Children = new Drawable[]
+                        {
+                            new Box
+                            {
+                                RelativeSizeAxes = Axes.Both,
+                                Colour = Colour4.FromHex("#4caf50")
+                            },
+                            new SpriteIcon
+                            {
+                                Anchor = Anchor.Centre,
+                                Origin = Anchor.Centre,
+                                Icon = FontAwesome.Solid.Phone,
+                                Size = new Vector2(16),
+                                Colour = Colour4.White
+                            }
+                        }
+                    },
+                    new CircularContainer
+                    {
+                        Position = new Vector2(275, 88),
+                        Size = new Vector2(36),
+                        Masking = true,
+                        Children = new Drawable[]
+                        {
+                            new Box
+                            {
+                                RelativeSizeAxes = Axes.Both,
+                                Colour = Colour4.FromHex("#f44336")
+                            },
+                            new SpriteIcon
+                            {
+                                Anchor = Anchor.Centre,
+                                Origin = Anchor.Centre,
+                                Icon = FontAwesome.Solid.PhoneSlash,
+                                Size = new Vector2(16),
+                                Colour = Colour4.White
+                            }
+                        }
+                    }
+                }
+            };
+        }
+
+        private Container createSteamToast()
+        {
+            return new Container
+            {
+                Anchor = Anchor.BottomRight,
+                Origin = Anchor.BottomRight,
+                Position = new Vector2(-25, -25),
+                Size = new Vector2(330, 95),
+                Masking = true,
+                CornerRadius = 4,
+                BorderThickness = 1,
+                BorderColour = Colour4.FromHex("#222830"),
+                Alpha = 0,
+                Children = new Drawable[]
+                {
+                    new Box
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Colour = Colour4.FromHex("#1b2838")
+                    },
+                    new Container
+                    {
+                        Position = new Vector2(12, 12),
+                        Size = new Vector2(40),
+                        Masking = true,
+                        CornerRadius = 3,
+                        Children = new Drawable[]
+                        {
+                            new Box
+                            {
+                                RelativeSizeAxes = Axes.Both,
+                                Colour = Colour4.FromHex("#2a475e")
+                            },
+                            new SpriteIcon
+                            {
+                                Anchor = Anchor.Centre,
+                                Origin = Anchor.Centre,
+                                Icon = FontAwesome.Brands.Steam,
+                                Size = new Vector2(26),
+                                Colour = Colour4.FromHex("#66c0f4")
+                            }
+                        }
+                    },
+                    new OsuSpriteText
+                    {
+                        Text = "Друг",
+                        Font = OsuFont.GetFont(size: 14, weight: FontWeight.Bold),
+                        Colour = Colour4.FromHex("#66c0f4"),
+                        Position = new Vector2(62, 14)
+                    },
+                    new OsuSpriteText
+                    {
+                        Text = "Скинь сотку на шаурму, верну завтра!",
+                        Font = OsuFont.GetFont(size: 12),
+                        Colour = Colour4.FromHex("#c6d4df"),
+                        Position = new Vector2(62, 36)
+                    },
+                    new OsuSpriteText
+                    {
+                        Text = "Steam • Сообщение чата",
+                        Font = OsuFont.GetFont(size: 10),
+                        Colour = Colour4.FromHex("#8f98a0"),
+                        Position = new Vector2(62, 62)
+                    }
+                }
+            };
+        }
+
+        private Container createWindowsWatermark()
+        {
+            return new Container
+            {
+                Anchor = Anchor.BottomRight,
+                Origin = Anchor.BottomRight,
+                Position = new Vector2(-30, -30),
+                AutoSizeAxes = Axes.Both,
+                Alpha = 0,
+                Children = new Drawable[]
+                {
+                    new FillFlowContainer
+                    {
+                        AutoSizeAxes = Axes.Both,
+                        Direction = FillDirection.Vertical,
+                        Spacing = new Vector2(0, 3),
+                        Children = new Drawable[]
+                        {
+                            new OsuSpriteText
+                            {
+                                Text = "Активация Windows",
+                                Font = OsuFont.GetFont(size: 18, weight: FontWeight.Light),
+                                Colour = Colour4.White.Opacity(0.8f)
+                            },
+                            new OsuSpriteText
+                            {
+                                Text = "Чтобы активировать Windows, перейдите в раздел \"Параметры\".",
+                                Font = OsuFont.GetFont(size: 12, weight: FontWeight.Light),
+                                Colour = Colour4.White.Opacity(0.7f)
+                            }
+                        }
+                    }
+                }
+            };
+        }
+
+        private Container createInvertColorsContainer()
+        {
+            return new Container
+            {
+                RelativeSizeAxes = Axes.Both,
+                Anchor = Anchor.TopLeft,
+                Origin = Anchor.TopLeft,
+                Depth = float.MinValue,
+                Alpha = 0,
+                Blending = BlendingParameters.Additive,
+                Children = new Drawable[]
+                {
+                    new Box
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Colour = Colour4.White.Opacity(0.75f)
+                    }
+                }
+            };
+        }
+
+        private Container createMosaicContainer()
+        {
+            var container = new Container
+            {
+                RelativeSizeAxes = Axes.Both,
+                Anchor = Anchor.TopLeft,
+                Origin = Anchor.TopLeft,
+                Depth = float.MinValue,
+                Alpha = 0
+            };
+
+            for (int r = 0; r < 20; r++)
+            {
+                for (int c = 0; c < 30; c++)
+                {
+                    float opacity = (r + c) % 2 == 0 ? 0.35f : 0.15f;
+                    container.Add(new Box
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        RelativePositionAxes = Axes.Both,
+                        Width = 1f / 30f,
+                        Height = 1f / 20f,
+                        X = c * (1f / 30f),
+                        Y = r * (1f / 20f),
+                        Colour = Colour4.Black.Opacity(opacity)
+                    });
+                }
+            }
+
+            return container;
         }
 
         private Container createGlitchContainer()

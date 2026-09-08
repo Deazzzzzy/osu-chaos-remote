@@ -337,6 +337,18 @@ class ModernControlPanel:
         tk.Button(btn_hide_cursor, text="СКРЫТЬ КУРСОР", font=("Segoe UI", 9, "bold"), bg=self.accent_red, fg="#11111b", bd=0, command=lambda: self.send_command("HIDE_CURSOR:ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
         tk.Button(btn_hide_cursor, text="ВЕРНУТЬ КУРСОР", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("HIDE_CURSOR:OFF")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
 
+        # --- СЕКЦИЯ: КОЛЕСИКО ЗАГРУЗКИ (BUSY CURSOR) (ФАЗА 5) ---
+        busy_cursor_frame = tk.Frame(tab_cursor, bg=self.panel_color, padx=15, pady=12)
+        busy_cursor_frame.pack(fill=tk.X, pady=5)
+        self.busy_cursor_header = tk.Label(busy_cursor_frame, text="КОЛЁСИКО ЗАГРУЗКИ (BUSY CURSOR ⏳)", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
+        self.busy_cursor_header.pack(anchor=tk.W, pady=(0, 4))
+        tk.Label(busy_cursor_frame, text="Вращающийся синий спиннер прямо на кончике курсора!", font=("Segoe UI", 9), bg=self.panel_color, fg="#a6adc8").pack(anchor=tk.W, pady=(0, 5))
+        
+        btn_busy = tk.Frame(busy_cursor_frame, bg=self.panel_color)
+        btn_busy.pack(fill=tk.X, pady=2)
+        tk.Button(btn_busy, text="ВКЛЮЧИТЬ СПИННЕР ⏳", font=("Segoe UI", 9, "bold"), bg="#89dceb", fg="#11111b", bd=0, command=lambda: self.send_command("BUSY_CURSOR_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(btn_busy, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("BUSY_CURSOR_OFF")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
+
         # --- СЕКЦИЯ: РАЗМЕР КУРСОРА ---
         scale_cursor_frame = tk.Frame(tab_cursor, bg=self.panel_color, padx=15, pady=12)
         scale_cursor_frame.pack(fill=tk.X, pady=5)
@@ -433,6 +445,39 @@ class ModernControlPanel:
         tk.Button(row_shake, text="ВКЛЮЧИТЬ 🌋", font=("Segoe UI", 9, "bold"), bg=self.accent_earth, fg="#11111b", bd=0, command=lambda: self.send_command("SHAKE_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
         tk.Button(row_shake, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("SHAKE_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
 
+        # Фаза 5: Бочка 360° и Троттлинг 15 FPS
+        row_barrel = tk.Frame(cam_frame, bg=self.panel_color)
+        row_barrel.pack(fill=tk.X, pady=2)
+        tk.Button(row_barrel, text="🌀 БОЧКА / ВРАЩЕНИЕ ЭКРАНА 360° (3.5s) 🔄", font=("Segoe UI", 9, "bold"), bg="#cba6f7", fg="#11111b", bd=0, command=lambda: self.send_command("BARREL_ROLL")).pack(fill=tk.X, expand=True, padx=2)
+
+        row_fps = tk.Frame(cam_frame, bg=self.panel_color)
+        row_fps.pack(fill=tk.X, pady=2)
+        tk.Button(row_fps, text="⏱️ СЛАЙД-ШОУ / ТРОТТЛИНГ 15 FPS (3.5s) 📉", font=("Segoe UI", 9, "bold"), bg="#fab387", fg="#11111b", bd=0, command=lambda: self.send_command("FPS_THROTTLE")).pack(fill=tk.X, expand=True, padx=2)
+
+        # --- СЕКЦИЯ: ВИЗУАЛЬНЫЙ АД & НОТЫ (ФАЗА 5) ---
+        vis_frame = tk.Frame(tab2, bg=self.panel_color, padx=15, pady=12)
+        vis_frame.pack(fill=tk.X, pady=5)
+        self.vis_header = tk.Label(vis_frame, text="ВИЗУАЛЬНЫЙ АД & ХАОС НОТ (ФАЗА 5) 👁️", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
+        self.vis_header.pack(anchor=tk.W, pady=(0, 4))
+
+        row_cs_chaos = tk.Frame(vis_frame, bg=self.panel_color)
+        row_cs_chaos.pack(fill=tk.X, pady=2)
+        tk.Label(row_cs_chaos, text="Гигантизм vs Микро-ноты (CS):", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=26, anchor=tk.W).pack(side=tk.LEFT)
+        tk.Button(row_cs_chaos, text="ХАОС РАЗМЕРОВ 🎯", font=("Segoe UI", 9, "bold"), bg=self.accent_on, fg="#11111b", bd=0, command=lambda: self.send_command("CS_CHAOS_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(row_cs_chaos, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("CS_CHAOS_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+
+        row_mosaic = tk.Frame(vis_frame, bg=self.panel_color)
+        row_mosaic.pack(fill=tk.X, pady=2)
+        tk.Label(row_mosaic, text="Эффект 144p (Мозаика):", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=26, anchor=tk.W).pack(side=tk.LEFT)
+        tk.Button(row_mosaic, text="144p РЕЖИМ 🔲", font=("Segoe UI", 9, "bold"), bg="#89dceb", fg="#11111b", bd=0, command=lambda: self.send_command("MOSAIC_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(row_mosaic, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("MOSAIC_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+
+        row_invert = tk.Frame(vis_frame, bg=self.panel_color)
+        row_invert.pack(fill=tk.X, pady=2)
+        tk.Label(row_invert, text="Инверсия цветов (Негатив):", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=26, anchor=tk.W).pack(side=tk.LEFT)
+        tk.Button(row_invert, text="НЕГАТИВ 🌗", font=("Segoe UI", 9, "bold"), bg="#f9e2af", fg="#11111b", bd=0, command=lambda: self.send_command("INVERT_COLORS_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(row_invert, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("INVERT_COLORS_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+
         # --- СЕКЦИЯ: ТУННЕЛЬНОЕ ЗРЕНИЕ & НЕВИДИМЫЕ СЛАЙДЕРЫ (НОВОЕ В ФАЗЕ 4) ---
         tunnel_frame = tk.Frame(tab2, bg=self.panel_color, padx=15, pady=12)
         tunnel_frame.pack(fill=tk.X, pady=5)
@@ -453,7 +498,7 @@ class ModernControlPanel:
         tk.Button(row_ghost, text="ВКЛЮЧИТЬ 👻", font=("Segoe UI", 9, "bold"), bg=self.accent_purple, fg="#11111b", bd=0, command=lambda: self.send_command("GHOST_SLIDERS_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
         tk.Button(row_ghost, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("GHOST_SLIDERS_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
 
-        # --- СЕКЦИЯ: ЗВУКОВЫЕ ЭФФЕКТЫ (AUDIO HAVOC) (НОВОЕ В ФАЗЕ 4) ---
+        # --- СЕКЦИЯ: ЗВУКОВЫЕ ЭФФЕКТЫ (AUDIO HAVOC) (ФАЗА 4 + ФАЗА 5) ---
         audio_frame = tk.Frame(tab2, bg=self.panel_color, padx=15, pady=12)
         audio_frame.pack(fill=tk.X, pady=5)
         self.audio_header = tk.Label(audio_frame, text="ЗВУКОВЫЕ ЭФФЕКТЫ (AUDIO HAVOC)", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
@@ -472,6 +517,18 @@ class ModernControlPanel:
         self.lbl_pan.pack(side=tk.LEFT)
         tk.Button(row_pan, text="ВКЛЮЧИТЬ 8D 🎧", font=("Segoe UI", 9, "bold"), bg="#f5c2e7", fg="#11111b", bd=0, command=lambda: self.send_command("PAN_SPIN_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
         tk.Button(row_pan, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("PAN_SPIN_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+
+        # Фаза 5: Остановка винила (Tape Stop) и Эхо в соборе (Reverb)
+        row_tape = tk.Frame(audio_frame, bg=self.panel_color)
+        row_tape.pack(fill=tk.X, pady=2)
+        tk.Button(row_tape, text="📼 ЗАЖЕВАЛО ПЛЕНКУ / ОСТАНОВКА ВИНИЛА (TAPE STOP) 🛑", font=("Segoe UI", 9, "bold"), bg="#fab387", fg="#11111b", bd=0, command=lambda: self.send_command("TAPE_STOP")).pack(fill=tk.X, expand=True, padx=2)
+
+        row_reverb = tk.Frame(audio_frame, bg=self.panel_color)
+        row_reverb.pack(fill=tk.X, pady=2)
+        self.lbl_reverb = tk.Label(row_reverb, text="Эхо в соборе (Reverb):", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=26, anchor=tk.W)
+        self.lbl_reverb.pack(side=tk.LEFT)
+        tk.Button(row_reverb, text="ВКЛЮЧИТЬ ЭХО ⛪", font=("Segoe UI", 9, "bold"), bg="#cba6f7", fg="#11111b", bd=0, command=lambda: self.send_command("REVERB_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(row_reverb, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("REVERB_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
 
         # --- СЕКЦИЯ: ЗЕМЛЕТРЯСЕНИЕ (СЛАЙДЕР СИЛЫ) ---
         earth_frame = tk.Frame(tab2, bg=self.panel_color, padx=15, pady=10)
@@ -670,6 +727,23 @@ class ModernControlPanel:
         row_troll_2.pack(fill=tk.X, pady=2)
         tk.Button(row_troll_2, text="ВХОДЯЩИЙ DISCORD 📞", font=("Segoe UI", 9, "bold"), bg="#5865F2", fg="#ffffff", bd=0, command=lambda: self.send_command("TROLL:DISCORD")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
         tk.Button(row_troll_2, text="ДИСКОРД (ТОЛЬКО ЗВУК) 🔊", font=("Segoe UI", 9, "bold"), bg="#7289da", fg="#ffffff", bd=0, command=lambda: self.send_command("TROLL:DISCORD_AUDIO")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
+
+        # Ряд 8: Telegram от Мамули (Фаза 5)
+        row_troll_tg = tk.Frame(troll_frame, bg=self.panel_color)
+        row_troll_tg.pack(fill=tk.X, pady=2)
+        tk.Button(row_troll_tg, text="ЗВОНОК TELEGRAM (МАМУЛЯ ❤️) 📱", font=("Segoe UI", 9, "bold"), bg="#29b6f6", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:TELEGRAM")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(row_troll_tg, text="ТЕЛЕГРАМ (ТОЛЬКО ЗВУК) 🔔", font=("Segoe UI", 9, "bold"), bg="#0288d1", fg="#ffffff", bd=0, command=lambda: self.send_command("TROLL:TELEGRAM_AUDIO")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
+
+        # Ряд 9: Steam + Водяной знак Windows (Фаза 5)
+        row_troll_steam = tk.Frame(troll_frame, bg=self.panel_color)
+        row_troll_steam.pack(fill=tk.X, pady=2)
+        tk.Button(row_troll_steam, text="💬 STEAM СООБЩЕНИЕ (Сотка на шаурму) 🎮", font=("Segoe UI", 9, "bold"), bg="#1b2838", fg="#66c0f4", bd=0, command=lambda: self.send_command("TROLL:STEAM")).pack(fill=tk.X, expand=True, padx=2)
+
+        row_watermark = tk.Frame(troll_frame, bg=self.panel_color)
+        row_watermark.pack(fill=tk.X, pady=2)
+        tk.Label(row_watermark, text="Водяной знак Активация Windows:", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=30, anchor=tk.W).pack(side=tk.LEFT)
+        tk.Button(row_watermark, text="ВКЛЮЧИТЬ", font=("Segoe UI", 9, "bold"), bg=self.accent_on, fg="#11111b", bd=0, command=lambda: self.send_command("WATERMARK_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(row_watermark, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("WATERMARK_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
 
         # ==========================================
         # Вкладка 5: ГАЛЛЮЦИНАЦИИ
@@ -917,6 +991,42 @@ class ModernControlPanel:
             self.troll_header.config(text="ТРОЛЛИНГ: СИНИЙ ЭКРАН (BSOD) 💻", fg="#89dceb")
         elif command == "TROLL:DEFENDER":
             self.troll_header.config(text="ТРОЛЛИНГ: ЗАЩИТНИК DEFENDER 🛡️", fg="#fab387")
+        elif command in ("TROLL:TELEGRAM", "TROLL_TELEGRAM"):
+            self.troll_header.config(text="ТРОЛЛИНГ: ЗВОНОК В ТЕЛЕГРАМ (МАМУЛЯ ❤️) 📱", fg="#29b6f6")
+        elif command in ("TROLL:TELEGRAM_AUDIO", "TROLL_TELEGRAM_AUDIO"):
+            self.troll_header.config(text="ТРОЛЛИНГ: ТЕЛЕГРАМ (ТОЛЬКО ЗВУК) 🔔", fg="#0288d1")
+        elif command in ("TROLL:STEAM", "TROLL_STEAM"):
+            self.troll_header.config(text="ТРОЛЛИНГ: STEAM СООБЩЕНИЕ (ШАУРМА) 🎮", fg="#66c0f4")
+        elif command == "WATERMARK_ON":
+            self.troll_header.config(text="ТРОЛЛИНГ: ВОДЯНОЙ ЗНАК WINDOWS 🪟", fg=self.accent_on)
+        elif command == "WATERMARK_OFF":
+            self.troll_header.config(text="7. СИСТЕМНЫЙ ТРОЛЛИНГ & ОБМАНКИ 🪟", fg=self.text_color)
+        elif command == "BUSY_CURSOR_ON":
+            self.busy_cursor_header.config(text="КОЛЁСИКО ЗАГРУЗКИ (ВКЛЮЧЕНО 🟢)", fg=self.accent_on)
+        elif command == "BUSY_CURSOR_OFF":
+            self.busy_cursor_header.config(text="КОЛЁСИКО ЗАГРУЗКИ (BUSY CURSOR ⏳)", fg=self.text_color)
+        elif command == "CS_CHAOS_ON":
+            self.vis_header.config(text="ХАОС НОТ: ГИГАНТИЗМ VS МИКРО 🟢", fg=self.accent_on)
+        elif command == "CS_CHAOS_OFF":
+            self.vis_header.config(text="ВИЗУАЛЬНЫЙ АД & ХАОС НОТ (ФАЗА 5) 👁️", fg=self.text_color)
+        elif command == "MOSAIC_ON":
+            self.vis_header.config(text="ВИЗУАЛЬНЫЙ АД: 144p МОЗАИКА 🟢", fg="#89dceb")
+        elif command == "MOSAIC_OFF":
+            self.vis_header.config(text="ВИЗУАЛЬНЫЙ АД & ХАОС НОТ (ФАЗА 5) 👁️", fg=self.text_color)
+        elif command == "INVERT_COLORS_ON":
+            self.vis_header.config(text="ВИЗУАЛЬНЫЙ АД: НЕГАТИВ / ИНВЕРСИЯ 🟢", fg="#f9e2af")
+        elif command == "INVERT_COLORS_OFF":
+            self.vis_header.config(text="ВИЗУАЛЬНЫЙ АД & ХАОС НОТ (ФАЗА 5) 👁️", fg=self.text_color)
+        elif command == "BARREL_ROLL":
+            self.cam_header.config(text="КАМЕРА: БОЧКА 360° 🔄", fg="#cba6f7")
+        elif command == "FPS_THROTTLE":
+            self.cam_header.config(text="КАМЕРА: ТРОТТЛИНГ 15 FPS ⏱️", fg="#fab387")
+        elif command == "TAPE_STOP":
+            self.audio_header.config(text="ЗВУК: ЗАЖЕВАЛО ПЛЕНКУ / TAPE STOP 🛑", fg="#fab387")
+        elif command == "REVERB_ON":
+            self.lbl_reverb.config(text="Эхо в соборе: ВКЛ ⛪", fg=self.accent_on)
+        elif command == "REVERB_OFF":
+            self.lbl_reverb.config(text="Эхо в соборе (Reverb):", fg=self.text_color)
 
     def send_command(self, command: str):
         ip = self.ip_entry.get().strip()
