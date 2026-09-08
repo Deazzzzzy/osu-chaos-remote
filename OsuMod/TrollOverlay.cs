@@ -971,6 +971,112 @@ namespace osu.Game.Rulesets.Osu.Mods
             }
         }
 
+        public static void PlayDoorKnockSoundDirect()
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    string target = localKnockPath ?? @"C:\Users\dizzy\Downloads\Osu_Debuffs\osu\osu.Game.Rulesets.Osu\Mods\stuk-v-dver_BGgu9hKn.mp3";
+                    if (File.Exists(target))
+                    {
+                        mciSendString("close door_knock", null, 0, IntPtr.Zero);
+                        mciSendString($"open \"{target}\" type mpegvideo alias door_knock", null, 0, IntPtr.Zero);
+                        mciSendString("play door_knock", null, 0, IntPtr.Zero);
+                    }
+                }
+                catch { }
+            }
+        }
+
+        public static void StopMosquitoSoundDirect()
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    mciSendString("stop mosq_sound", null, 0, IntPtr.Zero);
+                    mciSendString("close mosq_sound", null, 0, IntPtr.Zero);
+                }
+                catch { }
+            }
+        }
+
+        public static void PlayMosquitoSoundDirect(int id)
+        {
+            StopMosquitoSoundDirect();
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    string defaultFile = id == 1 ? "1.mp3" : (id == 2 ? "2.mp3" : "3.mp3");
+                    string? localPath = id == 1 ? localMosquitoPath1 : (id == 2 ? localMosquitoPath2 : localMosquitoPath3);
+                    string target = localPath ?? Path.Combine(@"C:\Users\dizzy\Downloads\Osu_Debuffs\osu\osu.Game.Rulesets.Osu\Mods", defaultFile);
+                    if (File.Exists(target))
+                    {
+                        mciSendString("close mosq_sound", null, 0, IntPtr.Zero);
+                        mciSendString($"open \"{target}\" type mpegvideo alias mosq_sound", null, 0, IntPtr.Zero);
+                        mciSendString("play mosq_sound", null, 0, IntPtr.Zero);
+                    }
+                }
+                catch { }
+            }
+        }
+
+        public static void PlayDiscordSoundDirect()
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    string target = localAudioPath ?? @"C:\Users\dizzy\Downloads\Osu_Debuffs\osu\osu.Game.Rulesets.Osu\Mods\call_calling.mp3";
+                    if (File.Exists(target))
+                    {
+                        mciSendString("close disc_ring", null, 0, IntPtr.Zero);
+                        mciSendString($"open \"{target}\" type mpegvideo alias disc_ring", null, 0, IntPtr.Zero);
+                        mciSendString("play disc_ring", null, 0, IntPtr.Zero);
+                    }
+                }
+                catch { }
+            }
+        }
+
+        public static void PlayTelegramSoundDirect()
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    string target = localTelegramAudioPath ?? @"C:\Users\dizzy\Downloads\Osu_Debuffs\osu\osu.Game.Rulesets.Osu\Mods\telegram-zvonok-pk.mp3";
+                    if (File.Exists(target))
+                    {
+                        mciSendString("close tg_ring", null, 0, IntPtr.Zero);
+                        mciSendString($"open \"{target}\" type mpegvideo alias tg_ring", null, 0, IntPtr.Zero);
+                        mciSendString("play tg_ring", null, 0, IntPtr.Zero);
+                    }
+                }
+                catch { }
+            }
+        }
+
+        public static void PlaySteamSoundDirect()
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    string target = localSteamAudioPath ?? @"C:\Users\dizzy\Downloads\Osu_Debuffs\osu\osu.Game.Rulesets.Osu\Mods\steam-.mp3";
+                    if (File.Exists(target))
+                    {
+                        mciSendString("close steam_msg", null, 0, IntPtr.Zero);
+                        mciSendString($"open \"{target}\" type mpegvideo alias steam_msg", null, 0, IntPtr.Zero);
+                        mciSendString("play steam_msg", null, 0, IntPtr.Zero);
+                    }
+                }
+                catch { }
+            }
+        }
+
         public void ShowGpuDriverCrash()
         {
             gpuCrashContainer.ClearTransforms();

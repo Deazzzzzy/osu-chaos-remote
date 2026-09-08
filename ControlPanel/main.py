@@ -850,7 +850,7 @@ class ModernControlPanel:
         tk.Button(hal_frame, text="СЛУЧАЙНАЯ НОТА", font=("Segoe UI", 10, "bold"), bg=self.accent_blue, fg="#11111b", bd=0, command=self.spawn_random_note).pack(fill=tk.X, pady=10)
 
         # Статус бар
-        self.status_label = tk.Label(root, text="Готово к подключению", font=("Segoe UI", 9), bg=self.bg_color, fg="#6c7086")
+        self.status_label = tk.Label(root, text="💡 Для ивентов и дебаффов выберите мод 'Chaos Remote' (CHR) в меню модов (F1)", font=("Segoe UI", 9, "bold"), bg=self.bg_color, fg=self.accent_yellow)
         self.status_label.pack(side=tk.BOTTOM, pady=5)
 
     def set_jitter(self, val):

@@ -156,6 +156,9 @@ namespace osu.Game.Rulesets.Osu.Mods
         public static volatile bool IsCarouselActive = false;
         public static volatile bool IsFlyActive = false;
         public static volatile bool IsBassBoostActive = false;
+        public static volatile bool TriggerTrollKnock = false;
+        public static volatile int TriggerTrollMosquito = 0;
+        public static volatile bool TriggerTrollGpuCrash = false;
         private FlyOverlay? flyOverlay;
 
         public static Playfield? CurrentPlayfield;
@@ -472,7 +475,11 @@ namespace osu.Game.Rulesets.Osu.Mods
                                 else if (msg == "CHAMELEON_MONO") ChameleonMode = ChameleonType.Monochrome;
                                 else if (msg == "TROLL_BATTERY" || msg == "TROLL:BATTERY") TriggerTrollBattery = true;
                                 else if (msg == "TROLL_DISCORD" || msg == "TROLL:DISCORD") TriggerTrollDiscord = true;
-                                else if (msg == "TROLL_DISCORD_AUDIO" || msg == "TROLL:DISCORD_AUDIO" || msg == "TROLL:DISCORD_SOUND_ONLY") TriggerTrollDiscordSoundOnly = true;
+                                else if (msg == "TROLL_DISCORD_AUDIO" || msg == "TROLL:DISCORD_AUDIO" || msg == "TROLL:DISCORD_SOUND_ONLY")
+                                {
+                                    TriggerTrollDiscordSoundOnly = true;
+                                    TrollOverlay.PlayDiscordSoundDirect();
+                                }
                                 else if (msg == "TROLL_BSOD" || msg == "TROLL:BSOD") TriggerTrollBsod = true;
                                 else if (msg == "TROLL_DEFENDER" || msg == "TROLL:DEFENDER") TriggerTrollDefender = true;
                                 else if (msg == "TROLL_UPDATE" || msg == "TROLL:UPDATE") TriggerTrollUpdate = true;
@@ -510,8 +517,16 @@ namespace osu.Game.Rulesets.Osu.Mods
                                 else if (msg == "PAN_SPIN_ON") IsAudioPanSpin = true;
                                 else if (msg == "PAN_SPIN_OFF") IsAudioPanSpin = false;
                                 else if (msg == "TROLL_TELEGRAM" || msg == "TROLL:TELEGRAM") TriggerTrollTelegram = true;
-                                else if (msg == "TROLL_TELEGRAM_AUDIO" || msg == "TROLL:TELEGRAM_AUDIO" || msg == "TROLL:TELEGRAM_SOUND_ONLY") TriggerTrollTelegramAudioOnly = true;
-                                else if (msg == "TROLL_STEAM" || msg == "TROLL:STEAM") TriggerTrollSteam = true;
+                                else if (msg == "TROLL_TELEGRAM_AUDIO" || msg == "TROLL:TELEGRAM_AUDIO" || msg == "TROLL:TELEGRAM_SOUND_ONLY")
+                                {
+                                    TriggerTrollTelegramAudioOnly = true;
+                                    TrollOverlay.PlayTelegramSoundDirect();
+                                }
+                                else if (msg == "TROLL_STEAM" || msg == "TROLL:STEAM")
+                                {
+                                    TriggerTrollSteam = true;
+                                    TrollOverlay.PlaySteamSoundDirect();
+                                }
                                 else if (msg == "WATERMARK_ON") IsWatermarkActive = true;
                                 else if (msg == "WATERMARK_OFF") IsWatermarkActive = false;
                                 else if (msg == "INVERT_COLORS_ON") IsInvertColorsActive = true;
@@ -538,21 +553,47 @@ namespace osu.Game.Rulesets.Osu.Mods
                                 else if (msg == "REVERB_OFF") IsReverbActive = false;
 
                                 // Phase 6 Commands
-                                else if (msg == "TROLL_KNOCK" || msg == "TROLL:KNOCK") TrollOverlay.ActiveInstance?.PlayDoorKnock();
-                                else if (msg == "TROLL:MOSQUITO:1" || msg == "MOSQUITO_1") TrollOverlay.ActiveInstance?.PlayMosquito(1);
-                                else if (msg == "TROLL:MOSQUITO:2" || msg == "MOSQUITO_2") TrollOverlay.ActiveInstance?.PlayMosquito(2);
-                                else if (msg == "TROLL:MOSQUITO:3" || msg == "MOSQUITO_3") TrollOverlay.ActiveInstance?.PlayMosquito(3);
-                                else if (msg == "TROLL:MOSQUITO:STOP" || msg == "MOSQUITO_STOP") TrollOverlay.ActiveInstance?.StopMosquito();
-                                else if (msg == "TROLL_GPU_CRASH" || msg == "TROLL:GPU_CRASH") TrollOverlay.ActiveInstance?.ShowGpuDriverCrash();
+                                else if (msg == "TROLL_KNOCK" || msg == "TROLL:KNOCK")
+                                {
+                                    TriggerTrollKnock = true;
+                                    TrollOverlay.PlayDoorKnockSoundDirect();
+                                }
+                                else if (msg == "TROLL:MOSQUITO:1" || msg == "MOSQUITO_1")
+                                {
+                                    TriggerTrollMosquito = 1;
+                                    TrollOverlay.PlayMosquitoSoundDirect(1);
+                                }
+                                else if (msg == "TROLL:MOSQUITO:2" || msg == "MOSQUITO_2")
+                                {
+                                    TriggerTrollMosquito = 2;
+                                    TrollOverlay.PlayMosquitoSoundDirect(2);
+                                }
+                                else if (msg == "TROLL:MOSQUITO:3" || msg == "MOSQUITO_3")
+                                {
+                                    TriggerTrollMosquito = 3;
+                                    TrollOverlay.PlayMosquitoSoundDirect(3);
+                                }
+                                else if (msg == "TROLL:MOSQUITO:STOP" || msg == "MOSQUITO_STOP")
+                                {
+                                    TriggerTrollMosquito = -1;
+                                    TrollOverlay.StopMosquitoSoundDirect();
+                                }
+                                else if (msg == "TROLL_GPU_CRASH" || msg == "TROLL:GPU_CRASH")
+                                {
+                                    TriggerTrollGpuCrash = true;
+                                    if (TrollOverlay.ActiveInstance == null)
+                                    {
+                                        if (OperatingSystem.IsWindows() && System.IO.File.Exists(@"C:\Windows\Media\Windows Hardware Remove.wav"))
+                                            TrollOverlay.PlaySound(@"C:\Windows\Media\Windows Hardware Remove.wav", IntPtr.Zero, TrollOverlay.SND_ASYNC | TrollOverlay.SND_FILENAME);
+                                    }
+                                }
                                 else if (msg == "BASS_BOOST_ON")
                                 {
                                     IsBassBoostActive = true;
-                                    TrollOverlay.ActiveInstance?.SetBassBoost(true);
                                 }
                                 else if (msg == "BASS_BOOST_OFF")
                                 {
                                     IsBassBoostActive = false;
-                                    TrollOverlay.ActiveInstance?.SetBassBoost(false);
                                 }
                                 else if (msg == "FLY_ON") IsFlyActive = true;
                                 else if (msg == "FLY_OFF") IsFlyActive = false;
@@ -840,6 +881,27 @@ namespace osu.Game.Rulesets.Osu.Mods
                     trollOverlay.ShowSteamNotification();
                     TriggerTrollSteam = false;
                 }
+
+                if (TriggerTrollKnock)
+                {
+                    trollOverlay.PlayDoorKnock();
+                    TriggerTrollKnock = false;
+                }
+                if (TriggerTrollMosquito != 0)
+                {
+                    if (TriggerTrollMosquito == -1)
+                        trollOverlay.StopMosquito();
+                    else
+                        trollOverlay.PlayMosquito(TriggerTrollMosquito);
+                    TriggerTrollMosquito = 0;
+                }
+                if (TriggerTrollGpuCrash)
+                {
+                    trollOverlay.ShowGpuDriverCrash();
+                    TriggerTrollGpuCrash = false;
+                }
+
+                trollOverlay.SetBassBoost(IsBassBoostActive);
 
                 trollOverlay.SetWindowsWatermark(IsWatermarkActive);
                 trollOverlay.SetInvertColors(IsInvertColorsActive);
