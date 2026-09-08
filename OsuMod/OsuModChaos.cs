@@ -143,10 +143,8 @@ namespace osu.Game.Rulesets.Osu.Mods
         public static volatile bool TriggerBarrelRoll = false;
         private static readonly System.Diagnostics.Stopwatch barrelRollTimer = new System.Diagnostics.Stopwatch();
         public static volatile bool IsCsChaosActive = false;
-        public static volatile float NotificationVolume = 2.0f;
         public static volatile int TargetFps = 0;
         private int lastAppliedFps = -1;
-        private float lastAppliedNotifVolume = -1;
         public static osu.Framework.Platform.GameHost? GameHostInstance;
         public static volatile bool TriggerTapeStop = false;
         private static readonly System.Diagnostics.Stopwatch tapeStopTimer = new System.Diagnostics.Stopwatch();
@@ -518,21 +516,7 @@ namespace osu.Game.Rulesets.Osu.Mods
                                 else if (msg == "BARREL_ROLL") TriggerBarrelRoll = true;
                                 else if (msg == "CS_CHAOS_ON") IsCsChaosActive = true;
                                 else if (msg == "CS_CHAOS_OFF") IsCsChaosActive = false;
-                                else if (msg.StartsWith("SET_NOTIF_VOLUME:") || msg.StartsWith("NOTIF_VOLUME:"))
-                                {
-                                    string valStr = msg.Substring(msg.IndexOf(':') + 1);
-                                    int endIdx = 0;
-                                    while (endIdx < valStr.Length && (char.IsDigit(valStr[endIdx]) || valStr[endIdx] == '.' || valStr[endIdx] == '-'))
-                                        endIdx++;
-                                    if (endIdx > 0)
-                                        valStr = valStr.Substring(0, endIdx);
 
-                                    if (float.TryParse(valStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float nvol))
-                                    {
-                                        NotificationVolume = Math.Clamp(nvol, 0f, 2.0f);
-                                        TrollOverlay.ApplyGlobalNotificationVolume(NotificationVolume);
-                                    }
-                                }
                                 else if (msg.StartsWith("SET_FPS:") || msg.StartsWith("FPS:"))
                                 {
                                     string valStr = msg.Substring(msg.IndexOf(':') + 1);
@@ -1124,11 +1108,7 @@ namespace osu.Game.Rulesets.Osu.Mods
                 trollOverlay?.ApplyFpsLimit(TargetFps);
             }
 
-            if (Math.Abs(NotificationVolume - lastAppliedNotifVolume) > 0.01f)
-            {
-                lastAppliedNotifVolume = NotificationVolume;
-                trollOverlay?.UpdateNotificationVolume(NotificationVolume);
-            }
+
 
             playfield.Rotation = totalRotation;
             playfield.Position = totalPosition;

