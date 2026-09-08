@@ -96,6 +96,7 @@ namespace osu.Game.Rulesets.Osu
 
         private Vector2 slipperyPos;
         private Vector2 slipperyVelocity;
+        private Vector2? prevPhysicalPos;
         private bool slipperyInitialized;
         private bool isSimulatingInput;
         private readonly Random inputRnd = new Random();
@@ -202,30 +203,67 @@ namespace osu.Game.Rulesets.Osu
                 if (OsuModChaos.IsSlipperyCursor)
                 {
                     float dt = Math.Clamp((float)Time.Elapsed / 1000f, 0.001f, 0.05f);
+                    float timeScale = dt * 60f;
 
                     if (!slipperyInitialized)
                     {
                         slipperyPos = targetPos;
+                        prevPhysicalPos = targetPos;
                         slipperyVelocity = Vector2.Zero;
                         slipperyInitialized = true;
                     }
 
-                    Vector2 toHand = targetPos - slipperyPos;
+                    Vector2 handDelta = prevPhysicalPos.HasValue ? (targetPos - prevPhysicalPos.Value) : Vector2.Zero;
+                    prevPhysicalPos = targetPos;
 
-                    // Сила притяжения к руке/перу игрока
-                    const float springK = 22f;
-                    slipperyVelocity += toHand * (springK * dt);
+                    if (handDelta.Length > 250f)
+                        handDelta = Vector2.Normalize(handDelta) * 250f;
 
-                    // Низкое трение льда: 0.88 за 1/60 секунды дает долгое скольжение с заносами
-                    float damping = MathF.Pow(0.88f, dt * 60f);
+                    // Движение руки передаёт импульс ускорения
+                    const float iceAccel = 0.22f;
+                    slipperyVelocity += handDelta * (iceAccel * timeScale);
+
+                    // Трение скольжения по льду
+                    float damping = MathF.Pow(0.935f, timeScale);
                     slipperyVelocity *= damping;
 
-                    slipperyPos += slipperyVelocity * (dt * 60f);
+                    // Движение исключительно по накопленной инерции (без принудительного возврата!)
+                    slipperyPos += slipperyVelocity * timeScale;
+
+                    // Мягкий отскок от краёв окна
+                    float minX = ScreenSpaceDrawQuad.TopLeft.X;
+                    float maxX = ScreenSpaceDrawQuad.BottomRight.X;
+                    float minY = ScreenSpaceDrawQuad.TopLeft.Y;
+                    float maxY = ScreenSpaceDrawQuad.BottomRight.Y;
+
+                    if (slipperyPos.X < minX)
+                    {
+                        slipperyPos.X = minX;
+                        slipperyVelocity.X = -slipperyVelocity.X * 0.35f;
+                    }
+                    else if (slipperyPos.X > maxX)
+                    {
+                        slipperyPos.X = maxX;
+                        slipperyVelocity.X = -slipperyVelocity.X * 0.35f;
+                    }
+
+                    if (slipperyPos.Y < minY)
+                    {
+                        slipperyPos.Y = minY;
+                        slipperyVelocity.Y = -slipperyVelocity.Y * 0.35f;
+                    }
+                    else if (slipperyPos.Y > maxY)
+                    {
+                        slipperyPos.Y = maxY;
+                        slipperyVelocity.Y = -slipperyVelocity.Y * 0.35f;
+                    }
+
                     targetPos = slipperyPos;
                 }
                 else
                 {
                     slipperyInitialized = false;
+                    prevPhysicalPos = null;
                     slipperyVelocity = Vector2.Zero;
                 }
 
@@ -256,6 +294,7 @@ namespace osu.Game.Rulesets.Osu
             else
             {
                 slipperyInitialized = false;
+                prevPhysicalPos = null;
                 slipperyVelocity = Vector2.Zero;
 
                 if (hadCustomModifier || mouseHistory.Count > 0 || invertChanged)
