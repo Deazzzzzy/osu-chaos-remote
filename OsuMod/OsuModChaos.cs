@@ -782,33 +782,6 @@ namespace osu.Game.Rulesets.Osu.Mods
                 lastGhostSliders = false;
             }
 
-            if (IsDrunkCamera)
-            {
-                float t = (float)playfield.Clock.CurrentTime / 1000f;
-                playfield.Rotation = MathF.Sin(t * 3.5f) * 15f;
-            }
-            else if (!IsScreenShake)
-            {
-                playfield.Rotation = 0f;
-            }
-
-            if (IsScreenShake)
-            {
-                float shakeIntensity = 12f;
-                playfield.Position = new Vector2(
-                    (rnd.NextSingle() * 2f - 1f) * shakeIntensity,
-                    (rnd.NextSingle() * 2f - 1f) * shakeIntensity
-                );
-                if (!IsDrunkCamera)
-                {
-                    playfield.Rotation = (rnd.NextSingle() * 2f - 1f) * 3.5f;
-                }
-            }
-            else if (!IsDrunkCamera)
-            {
-                playfield.Position = Vector2.Zero;
-            }
-
             if (IsAudioPanSpin)
             {
                 float t = (float)playfield.Clock.CurrentTime / 1000f;
@@ -869,19 +842,55 @@ namespace osu.Game.Rulesets.Osu.Mods
                 }
             }
             
-            // Землетрясение (Тряска интерфейса) и Искажение
+            // --- Положение, вращение (Пьяная камера, Тряска, Землетрясение) и масштаб ---
+            float totalRotation = 0f;
+            Vector2 totalPosition = Vector2.Zero;
+
+            float animTime = (float)(playfield.Time.Current / 1000.0);
+            if (playfield.Clock.ElapsedFrameTime == 0 || Math.Abs(animTime) < 0.001f)
+                animTime = Environment.TickCount64 / 1000f;
+
+            if (IsDrunkCamera)
+            {
+                totalRotation += MathF.Sin(animTime * 2.2f) * 16f;
+                totalPosition += new Vector2(
+                    MathF.Sin(animTime * 1.7f) * 22f,
+                    MathF.Cos(animTime * 1.3f) * 14f
+                );
+            }
+
+            if (IsEarthquakeActive)
+            {
+                totalRotation += (float)(rnd.NextDouble() * 10 - 5) * EarthquakeStrength;
+                totalPosition += new Vector2(
+                    (float)(rnd.NextDouble() * 16 - 8) * EarthquakeStrength,
+                    (float)(rnd.NextDouble() * 16 - 8) * EarthquakeStrength
+                );
+            }
+
+            if (IsScreenShake)
+            {
+                float shakeIntensity = 16f;
+                totalRotation += (rnd.NextSingle() * 2f - 1f) * 4f;
+                totalPosition += new Vector2(
+                    (rnd.NextSingle() * 2f - 1f) * shakeIntensity,
+                    (rnd.NextSingle() * 2f - 1f) * shakeIntensity
+                );
+            }
+
+            playfield.Rotation = totalRotation;
+            playfield.Position = totalPosition;
+
             float px = PlayfieldScaleX * (IsMirrorPlayfieldX ? -1 : 1);
             float py = PlayfieldScaleY * (IsMirrorPlayfieldY ? -1 : 1);
             Vector2 baseScale = new Vector2(px, py);
 
             if (IsEarthquakeActive)
             {
-                playfield.Rotation = (float)(rnd.NextDouble() * 10 - 5) * EarthquakeStrength;
                 playfield.Scale = baseScale + new Vector2((float)(rnd.NextDouble() * 0.4 - 0.2) * EarthquakeStrength);
             }
             else
             {
-                playfield.Rotation = 0;
                 playfield.Scale = baseScale;
             }
 

@@ -97,11 +97,15 @@ namespace osu.Game.Rulesets.Osu
         private Vector2 slipperyPos;
         private Vector2 slipperyVelocity;
         private bool slipperyInitialized;
+        private bool isSimulatingInput;
         private readonly Random inputRnd = new Random();
         private bool hadCustomModifier;
 
         protected override bool Handle(UIEvent e)
         {
+            if (isSimulatingInput)
+                return base.Handle(e);
+
             bool customModifier = OsuModChaos.InputLagMilliseconds > 0
                                   || OsuModChaos.InvertX
                                   || OsuModChaos.InvertY
@@ -112,7 +116,7 @@ namespace osu.Game.Rulesets.Osu
 
             if (e is MouseMoveEvent moveEvent)
             {
-                if (!OsuModChaos.IsMouseDisconnected)
+                if (!isSimulatingInput && !OsuModChaos.IsMouseDisconnected)
                     lastRawMousePosition = moveEvent.ScreenSpaceMousePosition;
 
                 if (OsuModChaos.InputLagMilliseconds > 0)
@@ -126,7 +130,7 @@ namespace osu.Game.Rulesets.Osu
             }
             else if (e is TouchMoveEvent touchEvent)
             {
-                if (!OsuModChaos.IsMouseDisconnected)
+                if (!isSimulatingInput && !OsuModChaos.IsMouseDisconnected)
                     lastRawMousePosition = touchEvent.ScreenSpaceTouch.Position;
 
                 if (OsuModChaos.InputLagMilliseconds > 0)
@@ -197,6 +201,8 @@ namespace osu.Game.Rulesets.Osu
 
                 if (OsuModChaos.IsSlipperyCursor)
                 {
+                    float dt = Math.Clamp((float)Time.Elapsed / 1000f, 0.001f, 0.05f);
+
                     if (!slipperyInitialized)
                     {
                         slipperyPos = targetPos;
@@ -204,10 +210,17 @@ namespace osu.Game.Rulesets.Osu
                         slipperyInitialized = true;
                     }
 
-                    Vector2 diff = targetPos - slipperyPos;
-                    slipperyVelocity += diff * 0.08f;
-                    slipperyVelocity *= 0.93f;
-                    slipperyPos += slipperyVelocity;
+                    Vector2 toHand = targetPos - slipperyPos;
+
+                    // Сила притяжения к руке/перу игрока
+                    const float springK = 22f;
+                    slipperyVelocity += toHand * (springK * dt);
+
+                    // Низкое трение льда: 0.88 за 1/60 секунды дает долгое скольжение с заносами
+                    float damping = MathF.Pow(0.88f, dt * 60f);
+                    slipperyVelocity *= damping;
+
+                    slipperyPos += slipperyVelocity * (dt * 60f);
                     targetPos = slipperyPos;
                 }
                 else
@@ -230,7 +243,15 @@ namespace osu.Game.Rulesets.Osu
                     );
                 }
 
-                new MousePositionAbsoluteInput { Position = targetPos }.Apply(CurrentState, this);
+                isSimulatingInput = true;
+                try
+                {
+                    new MousePositionAbsoluteInput { Position = targetPos }.Apply(CurrentState, this);
+                }
+                finally
+                {
+                    isSimulatingInput = false;
+                }
             }
             else
             {
@@ -241,7 +262,15 @@ namespace osu.Game.Rulesets.Osu
                 {
                     if (lastRawMousePosition.HasValue)
                     {
-                        new MousePositionAbsoluteInput { Position = lastRawMousePosition.Value }.Apply(CurrentState, this);
+                        isSimulatingInput = true;
+                        try
+                        {
+                            new MousePositionAbsoluteInput { Position = lastRawMousePosition.Value }.Apply(CurrentState, this);
+                        }
+                        finally
+                        {
+                            isSimulatingInput = false;
+                        }
                     }
 
                     mouseHistory.Clear();
