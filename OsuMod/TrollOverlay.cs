@@ -47,6 +47,12 @@ namespace osu.Game.Rulesets.Osu.Mods
         private Container windowsWatermarkContainer = null!;
         private Container invertColorsContainer = null!;
         private Container mosaicContainer = null!;
+        private Container fpsThrottleContainer = null!;
+
+        private bool lastInvertColors;
+        private bool lastMosaic;
+        private bool lastWatermark;
+        private bool lastFpsThrottle;
 
         private readonly List<Box> glitchSlices = new List<Box>();
         private osu.Game.Audio.Effects.AudioFilter? lowPassFilter;
@@ -91,6 +97,7 @@ namespace osu.Game.Rulesets.Osu.Mods
             windowsWatermarkContainer = createWindowsWatermark();
             invertColorsContainer = createInvertColorsContainer();
             mosaicContainer = createMosaicContainer();
+            fpsThrottleContainer = createFpsThrottleContainer();
 
             var children = new List<Drawable>
             {
@@ -107,6 +114,7 @@ namespace osu.Game.Rulesets.Osu.Mods
                 donationToast,
                 stickyKeysDialog,
                 windowsWatermarkContainer,
+                fpsThrottleContainer,
             };
 
             try
@@ -756,6 +764,9 @@ namespace osu.Game.Rulesets.Osu.Mods
 
         public void SetWindowsWatermark(bool active)
         {
+            if (active == lastWatermark) return;
+            lastWatermark = active;
+
             windowsWatermarkContainer.ClearTransforms();
             if (active)
                 windowsWatermarkContainer.FadeTo(0.75f, 400, Easing.OutCubic);
@@ -765,20 +776,38 @@ namespace osu.Game.Rulesets.Osu.Mods
 
         public void SetInvertColors(bool active)
         {
+            if (active == lastInvertColors) return;
+            lastInvertColors = active;
+
             invertColorsContainer.ClearTransforms();
             if (active)
-                invertColorsContainer.FadeTo(1f, 250, Easing.OutCubic);
+                invertColorsContainer.FadeTo(1f, 150, Easing.OutCubic);
             else
-                invertColorsContainer.FadeOut(250, Easing.InCubic);
+                invertColorsContainer.FadeOut(150, Easing.InCubic);
         }
 
         public void SetMosaic(bool active)
         {
+            if (active == lastMosaic) return;
+            lastMosaic = active;
+
             mosaicContainer.ClearTransforms();
             if (active)
-                mosaicContainer.FadeTo(1f, 200, Easing.OutCubic);
+                mosaicContainer.FadeTo(1f, 150, Easing.OutCubic);
             else
-                mosaicContainer.FadeOut(200, Easing.InCubic);
+                mosaicContainer.FadeOut(150, Easing.InCubic);
+        }
+
+        public void SetFpsThrottle(bool active)
+        {
+            if (active == lastFpsThrottle) return;
+            lastFpsThrottle = active;
+
+            fpsThrottleContainer.ClearTransforms();
+            if (active)
+                fpsThrottleContainer.FadeIn(120);
+            else
+                fpsThrottleContainer.FadeOut(180);
         }
 
 
@@ -1424,13 +1453,72 @@ namespace osu.Game.Rulesets.Osu.Mods
                 Origin = Anchor.TopLeft,
                 Depth = float.MinValue,
                 Alpha = 0,
-                Blending = BlendingParameters.Additive,
+                Blending = new BlendingParameters
+                {
+                    RGBEquation = BlendingEquation.Add,
+                    Source = BlendingType.OneMinusDstColor,
+                    Destination = BlendingType.OneMinusSrcAlpha,
+                    AlphaEquation = BlendingEquation.Add,
+                    SourceAlpha = BlendingType.Zero,
+                    DestinationAlpha = BlendingType.One
+                },
                 Children = new Drawable[]
                 {
                     new Box
                     {
                         RelativeSizeAxes = Axes.Both,
-                        Colour = Colour4.White.Opacity(0.75f)
+                        Colour = Colour4.White
+                    }
+                }
+            };
+        }
+
+        private Container createFpsThrottleContainer()
+        {
+            return new Container
+            {
+                Anchor = Anchor.TopCentre,
+                Origin = Anchor.TopCentre,
+                Position = new Vector2(0, 30),
+                AutoSizeAxes = Axes.Both,
+                Alpha = 0,
+                Depth = float.MinValue + 20,
+                Masking = true,
+                CornerRadius = 8,
+                BorderThickness = 2,
+                BorderColour = Colour4.FromHex("#ff3333"),
+                Children = new Drawable[]
+                {
+                    new Box
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Colour = Colour4.FromHex("#180606").Opacity(0.9f)
+                    },
+                    new FillFlowContainer
+                    {
+                        AutoSizeAxes = Axes.Both,
+                        Direction = FillDirection.Horizontal,
+                        Padding = new MarginPadding { Horizontal = 16, Vertical = 8 },
+                        Spacing = new Vector2(10, 0),
+                        Children = new Drawable[]
+                        {
+                            new SpriteIcon
+                            {
+                                Anchor = Anchor.CentreLeft,
+                                Origin = Anchor.CentreLeft,
+                                Icon = FontAwesome.Solid.ExclamationTriangle,
+                                Size = new Vector2(18),
+                                Colour = Colour4.FromHex("#ff4444")
+                            },
+                            new OsuSpriteText
+                            {
+                                Anchor = Anchor.CentreLeft,
+                                Origin = Anchor.CentreLeft,
+                                Text = "⚠️ 15 FPS (66.7 ms) • ТРОТТЛИНГ GPU / CPU",
+                                Font = OsuFont.GetFont(size: 15, weight: FontWeight.Bold),
+                                Colour = Colour4.White
+                            }
+                        }
                     }
                 }
             };
@@ -1447,23 +1535,86 @@ namespace osu.Game.Rulesets.Osu.Mods
                 Alpha = 0
             };
 
-            for (int r = 0; r < 20; r++)
+            // Chunky 144p compression macroblocks
+            const int cols = 18;
+            const int rows = 12;
+
+            for (int r = 0; r < rows; r++)
             {
-                for (int c = 0; c < 30; c++)
+                for (int c = 0; c < cols; c++)
                 {
-                    float opacity = (r + c) % 2 == 0 ? 0.35f : 0.15f;
-                    container.Add(new Box
+                    int blockHash = (r * 37) ^ (c * 17);
+                    float baseOpacity = ((r + c) % 2 == 0) ? 0.45f : 0.25f;
+                    Colour4 tint = ((blockHash % 7 == 0)) ? Colour4.FromHex("#182818").Opacity(0.40f)
+                                : ((blockHash % 11 == 0)) ? Colour4.FromHex("#281824").Opacity(0.40f)
+                                : Colour4.Black.Opacity(baseOpacity);
+
+                    container.Add(new Container
                     {
                         RelativeSizeAxes = Axes.Both,
                         RelativePositionAxes = Axes.Both,
-                        Width = 1f / 30f,
-                        Height = 1f / 20f,
-                        X = c * (1f / 30f),
-                        Y = r * (1f / 20f),
-                        Colour = Colour4.Black.Opacity(opacity)
+                        Width = 1f / cols,
+                        Height = 1f / rows,
+                        X = c * (1f / cols),
+                        Y = r * (1f / rows),
+                        Masking = true,
+                        BorderThickness = 1,
+                        BorderColour = Colour4.Black.Opacity(0.6f),
+                        Child = new Box
+                        {
+                            RelativeSizeAxes = Axes.Both,
+                            Colour = tint
+                        }
                     });
                 }
             }
+
+            // Low-resolution 144p quality badge in corner
+            container.Add(new Container
+            {
+                Anchor = Anchor.TopRight,
+                Origin = Anchor.TopRight,
+                Position = new Vector2(-25, 25),
+                AutoSizeAxes = Axes.Both,
+                Masking = true,
+                CornerRadius = 6,
+                BorderThickness = 1,
+                BorderColour = Colour4.FromHex("#555555"),
+                Children = new Drawable[]
+                {
+                    new Box
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Colour = Colour4.FromHex("#121212").Opacity(0.92f)
+                    },
+                    new FillFlowContainer
+                    {
+                        AutoSizeAxes = Axes.Both,
+                        Direction = FillDirection.Horizontal,
+                        Padding = new MarginPadding { Horizontal = 10, Vertical = 6 },
+                        Spacing = new Vector2(6, 0),
+                        Children = new Drawable[]
+                        {
+                            new SpriteIcon
+                            {
+                                Anchor = Anchor.CentreLeft,
+                                Origin = Anchor.CentreLeft,
+                                Icon = FontAwesome.Solid.Signal,
+                                Size = new Vector2(13),
+                                Colour = Colour4.FromHex("#ffaa00")
+                            },
+                            new OsuSpriteText
+                            {
+                                Anchor = Anchor.CentreLeft,
+                                Origin = Anchor.CentreLeft,
+                                Text = "144p • Авто (Низкое качество 48 kbps)",
+                                Font = OsuFont.GetFont(size: 12, weight: FontWeight.Bold),
+                                Colour = Colour4.White
+                            }
+                        }
+                    }
+                }
+            });
 
             return container;
         }

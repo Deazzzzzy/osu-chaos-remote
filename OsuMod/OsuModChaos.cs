@@ -144,10 +144,13 @@ namespace osu.Game.Rulesets.Osu.Mods
         private static readonly System.Diagnostics.Stopwatch barrelRollTimer = new System.Diagnostics.Stopwatch();
         public static volatile bool IsCsChaosActive = false;
         public static volatile bool TriggerFpsThrottle = false;
+        public static volatile bool IsFpsThrottleActive = false;
         private static readonly System.Diagnostics.Stopwatch fpsThrottleTimer = new System.Diagnostics.Stopwatch();
         private Vector2 throttledPosition = Vector2.Zero;
         private float throttledRotation = 0f;
         private double lastThrottleSnapshotTime = 0;
+        private Vector2? throttledCursorPos;
+        private Vector2 throttledStutterOffset = Vector2.Zero;
         public static volatile bool TriggerTapeStop = false;
         private static readonly System.Diagnostics.Stopwatch tapeStopTimer = new System.Diagnostics.Stopwatch();
         public static volatile bool IsReverbActive = false;
@@ -610,6 +613,10 @@ namespace osu.Game.Rulesets.Osu.Mods
         public void ApplyToDrawableHitObject(DrawableHitObject drawable)
         {
             tunnelVisionMod?.ApplyToDrawableHitObject(drawable);
+            if (!IsCsChaosActive)
+            {
+                drawable.Scale = Vector2.One;
+            }
         }
 
         public void ApplyToTrack(osu.Framework.Audio.IAdjustableAudioComponent track)
@@ -906,6 +913,11 @@ namespace osu.Game.Rulesets.Osu.Mods
                 foreach (var d in playfield.HitObjectContainer.AliveObjects)
                 {
                     d.Scale = Vector2.One;
+                    if (d is osu.Game.Rulesets.Osu.Objects.Drawables.DrawableSlider s)
+                    {
+                        if (s.HeadCircle != null) s.HeadCircle.Scale = Vector2.One;
+                        if (s.TailCircle != null) s.TailCircle.Scale = Vector2.One;
+                    }
                 }
                 lastCsChaos = false;
             }
@@ -1048,6 +1060,7 @@ namespace osu.Game.Rulesets.Osu.Mods
             {
                 fpsThrottleTimer.Restart();
                 lastThrottleSnapshotTime = 0;
+                throttledCursorPos = null;
                 TriggerFpsThrottle = false;
             }
 
@@ -1056,22 +1069,46 @@ namespace osu.Game.Rulesets.Osu.Mods
                 float fpsMs = (float)fpsThrottleTimer.Elapsed.TotalMilliseconds;
                 if (fpsMs < 3500f)
                 {
+                    IsFpsThrottleActive = true;
                     double nowTime = Environment.TickCount64;
                     // 15 FPS = 66.6ms frame time
-                    if (nowTime - lastThrottleSnapshotTime >= 66.6)
+                    if (nowTime - lastThrottleSnapshotTime >= 66.6 || lastThrottleSnapshotTime == 0)
                     {
                         throttledPosition = totalPosition;
                         throttledRotation = totalRotation;
+                        throttledStutterOffset = new Vector2(
+                            (rnd.NextSingle() * 2f - 1f) * 10f,
+                            (rnd.NextSingle() * 2f - 1f) * 10f
+                        );
+                        if (playfield.Cursor is OsuCursorContainer cursorCont && cursorCont.ActiveCursor != null)
+                        {
+                            throttledCursorPos = cursorCont.ActiveCursor.Position;
+                        }
                         lastThrottleSnapshotTime = nowTime;
                     }
-                    totalPosition = throttledPosition;
+
+                    totalPosition = throttledPosition + throttledStutterOffset;
                     totalRotation = throttledRotation;
+
+                    if (playfield.Cursor is OsuCursorContainer osuCursor && osuCursor.ActiveCursor != null && throttledCursorPos.HasValue)
+                    {
+                        osuCursor.ActiveCursor.Position = throttledCursorPos.Value;
+                    }
                 }
                 else
                 {
+                    IsFpsThrottleActive = false;
                     fpsThrottleTimer.Reset();
+                    throttledCursorPos = null;
+                    throttledStutterOffset = Vector2.Zero;
                 }
             }
+            else
+            {
+                IsFpsThrottleActive = false;
+            }
+
+            trollOverlay?.SetFpsThrottle(IsFpsThrottleActive);
 
             playfield.Rotation = totalRotation;
             playfield.Position = totalPosition;
@@ -1099,6 +1136,19 @@ namespace osu.Game.Rulesets.Osu.Mods
                     int hash = drawable.HitObject.StartTime.GetHashCode() ^ drawable.HitObject.GetHashCode();
                     float targetScale = (Math.Abs(hash) % 2 == 0) ? 1.65f : 0.42f;
                     drawable.Scale = new Vector2(targetScale);
+                }
+                else
+                {
+                    if (drawable.Scale != Vector2.One)
+                        drawable.Scale = Vector2.One;
+
+                    if (drawable is osu.Game.Rulesets.Osu.Objects.Drawables.DrawableSlider slider)
+                    {
+                        if (slider.HeadCircle != null && slider.HeadCircle.Scale != Vector2.One)
+                            slider.HeadCircle.Scale = Vector2.One;
+                        if (slider.TailCircle != null && slider.TailCircle.Scale != Vector2.One)
+                            slider.TailCircle.Scale = Vector2.One;
+                    }
                 }
 
                 // Хаос (тряска)

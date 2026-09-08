@@ -97,15 +97,19 @@ namespace osu.Game.Rulesets.Osu
         private bool isSimulatingInput;
         private readonly Random inputRnd = new Random();
         private bool hadCustomModifier;
+        private long lastThrottleInputTime;
+        private Vector2? throttledInputPos;
 
         protected override bool Handle(UIEvent e)
         {
             if (isSimulatingInput)
                 return base.Handle(e);
 
+            bool isFpsThrottle = OsuModChaos.IsFpsThrottleActive;
             bool customModifier = OsuModChaos.InputLagMilliseconds > 0
                                   || OsuModChaos.InvertX
                                   || OsuModChaos.InvertY
+                                  || isFpsThrottle
                                   || OsuModChaos.IsMouseDisconnected
                                   || OsuModChaos.CursorJitterStrength > 0
                                   || OsuModChaos.IsCircleRepulsion;
@@ -154,8 +158,10 @@ namespace osu.Game.Rulesets.Osu
             lastInvertX = OsuModChaos.InvertX;
             lastInvertY = OsuModChaos.InvertY;
 
+            bool isFpsThrottle = OsuModChaos.IsFpsThrottleActive;
             bool customModifier = lag > 0
                                   || invertActive
+                                  || isFpsThrottle
                                   || OsuModChaos.IsMouseDisconnected
                                   || OsuModChaos.CursorJitterStrength > 0
                                   || OsuModChaos.IsCircleRepulsion;
@@ -206,6 +212,20 @@ namespace osu.Game.Rulesets.Osu
                         (inputRnd.NextSingle() * 2f - 1f) * j,
                         (inputRnd.NextSingle() * 2f - 1f) * j
                     );
+                }
+
+                if (isFpsThrottle)
+                {
+                    if (now - lastThrottleInputTime >= 66.6 || !throttledInputPos.HasValue)
+                    {
+                        lastThrottleInputTime = now;
+                        throttledInputPos = targetPos;
+                    }
+                    targetPos = throttledInputPos.Value;
+                }
+                else
+                {
+                    throttledInputPos = null;
                 }
 
                 isSimulatingInput = true;
