@@ -238,7 +238,17 @@ namespace osu.Game.Rulesets.Osu.Mods
         private BlackHoleOverlay? blackHoleOverlay;
         public static HallucinationOverlay? HallucinationOverlayInstance;
 
+        static OsuModChaos()
+        {
+            EnsureServerRunning();
+        }
+
         public OsuModChaos()
+        {
+            EnsureServerRunning();
+        }
+
+        public static void EnsureServerRunning()
         {
             StartServer();
         }
@@ -261,6 +271,7 @@ namespace osu.Game.Rulesets.Osu.Mods
                     {
                         TcpListener listener = new TcpListener(IPAddress.Any, 9000);
                         listener.Start();
+                        Console.WriteLine("[ChaosRemote] TCP Server successfully started on port 9000");
                         while (true)
                         {
                             using (TcpClient client = listener.AcceptTcpClient())
@@ -269,6 +280,7 @@ namespace osu.Game.Rulesets.Osu.Mods
                                 byte[] buffer = new byte[256];
                                 int bytes = stream.Read(buffer, 0, buffer.Length);
                                 string msg = Encoding.UTF8.GetString(buffer, 0, bytes).Trim();
+                                Console.WriteLine($"[ChaosRemote] Command received: '{msg}'");
                                 
                                 if (msg == "CHAOS_ON") IsChaosActive = true;
                                 else if (msg == "CHAOS_OFF") IsChaosActive = false;
@@ -1438,8 +1450,8 @@ namespace osu.Game.Rulesets.Osu.Mods
             public bool IsActive;
             private bool wasActive;
             private Box blackoutBox;
-            private osu.Framework.Audio.Sample.Sample powerDownSample;
-            private osu.Framework.Audio.Sample.Sample powerUpSample;
+            private osu.Framework.Audio.Sample.Sample? powerDownSample;
+            private osu.Framework.Audio.Sample.Sample? powerUpSample;
             
             private System.Diagnostics.Stopwatch resumeTimer = new System.Diagnostics.Stopwatch();
             private bool isResuming;

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using osu.Framework.Allocation;
 using osu.Framework.Audio.Track;
 using osu.Framework.Graphics;
@@ -23,7 +24,7 @@ namespace osu.Game.Rulesets.Osu.Mods
         private static extern bool MessageBeep(uint uType);
 
         [DllImport("winmm.dll", EntryPoint = "mciSendStringW", CharSet = CharSet.Unicode)]
-        private static extern int mciSendString(string command, StringBuilder? buffer, int bufferSize, IntPtr hwndCallback);
+        private static extern int mciSendString(string command, IntPtr buffer, int bufferSize, IntPtr hwndCallback);
 
         [DllImport("winmm.dll", EntryPoint = "PlaySoundW", CharSet = CharSet.Unicode)]
         public static extern bool PlaySound(string pszSound, IntPtr hmod, uint fdwSound);
@@ -674,31 +675,166 @@ namespace osu.Game.Rulesets.Osu.Mods
             return null;
         }
 
-        private static void playMciSound(string alias, string filename, string? cachedLocalPath, bool repeat = false)
+        private static int activeMosquitoBassStream;
+        private static int activeDiscordBassStream;
+        private static int activeTelegramBassStream;
+        private static int activeSteamBassStream;
+        private static int activeKnockBassStream;
+
+        private static readonly System.Collections.Concurrent.BlockingCollection<string> mciCommandQueue = new();
+        private static Thread? mciThread;
+        private static readonly object mciInitLock = new object();
+
+        private static void ensureMciThread()
         {
             if (!OperatingSystem.IsWindows()) return;
+            lock (mciInitLock)
+            {
+                if (mciThread == null || !mciThread.IsAlive)
+                {
+                    mciThread = new Thread(() =>
+                    {
+                        foreach (string cmd in mciCommandQueue.GetConsumingEnumerable())
+                        {
+                            try
+                            {
+                                int res = mciSendString(cmd, IntPtr.Zero, 0, IntPtr.Zero);
+                                Console.WriteLine($"[ChaosRemote MCI] '{cmd}' -> {res}");
+                            }
+                            catch { }
+                        }
+                    })
+                    {
+                        IsBackground = true,
+                        Name = "MCI_Audio_Worker"
+                    };
+                    mciThread.SetApartmentState(ApartmentState.STA);
+                    mciThread.Start();
+                }
+            }
+        }
+
+        private static void playMciSound(string alias, string filename, string? cachedLocalPath, bool repeat = false)
+        {
             try
             {
                 string? target = resolveAudioPath(filename, cachedLocalPath);
-                if (target != null && File.Exists(target))
+                if (target == null || !File.Exists(target))
                 {
-                    mciSendString($"close {alias}", null, 0, IntPtr.Zero);
-                    mciSendString($"open \"{target}\" type mpegvideo alias {alias}", null, 0, IntPtr.Zero);
-                    mciSendString($"setaudio {alias} volume to 1000", null, 0, IntPtr.Zero);
+                    Console.WriteLine($"[ChaosRemote] Sound file not found: '{filename}'");
+                    return;
+                }
+
+                Console.WriteLine($"[ChaosRemote] Playing direct device sound: '{filename}' from '{target}' (repeat={repeat})");
+
+                // 1. Direct hardware playback via ManagedBass (Device Master channel, bypasses TrackMixer)
+                bool bassPlayed = false;
+                try
+                {
+                    var flags = repeat ? ManagedBass.BassFlags.Loop : ManagedBass.BassFlags.AutoFree;
+                    int stream = ManagedBass.Bass.CreateStream(target, 0, 0, flags);
+                    if (stream != 0)
+                    {
+                        ManagedBass.Bass.ChannelSetAttribute(stream, ManagedBass.ChannelAttribute.Volume, 1.0f);
+                        if (ManagedBass.Bass.ChannelPlay(stream, true))
+                        {
+                            bassPlayed = true;
+                            if (alias == "mosq_sound")
+                            {
+                                if (activeMosquitoBassStream != 0 && activeMosquitoBassStream != stream)
+                                {
+                                    ManagedBass.Bass.ChannelStop(activeMosquitoBassStream);
+                                    ManagedBass.Bass.StreamFree(activeMosquitoBassStream);
+                                }
+                                activeMosquitoBassStream = stream;
+                            }
+                            else if (alias == "disc_ring")
+                            {
+                                activeDiscordBassStream = stream;
+                            }
+                            else if (alias == "tg_ring")
+                            {
+                                activeTelegramBassStream = stream;
+                            }
+                            else if (alias == "steam_msg")
+                            {
+                                activeSteamBassStream = stream;
+                            }
+                            else if (alias == "door_knock")
+                            {
+                                activeKnockBassStream = stream;
+                            }
+                            Console.WriteLine($"[ChaosRemote] ManagedBass stream={stream} playing directly on device!");
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[ChaosRemote] ManagedBass.CreateStream error={ManagedBass.Bass.LastError}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[ChaosRemote] ManagedBass exception: {ex.Message}");
+                }
+
+                // 2. Fallback: Windows MCI on dedicated STA thread
+                if (OperatingSystem.IsWindows() && !bassPlayed)
+                {
+                    ensureMciThread();
+                    mciCommandQueue.Add($"close {alias}");
+                    mciCommandQueue.Add($"open \"{target}\" type mpegvideo alias {alias}");
+                    mciCommandQueue.Add($"setaudio {alias} volume to 1000");
                     string cmd = repeat ? $"play {alias} repeat" : $"play {alias}";
-                    mciSendString(cmd, null, 0, IntPtr.Zero);
+                    mciCommandQueue.Add(cmd);
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ChaosRemote] playMciSound exception: {ex.Message}");
+            }
         }
 
         private static void stopMciSound(string alias)
         {
-            if (!OperatingSystem.IsWindows()) return;
             try
             {
-                mciSendString($"stop {alias}", null, 0, IntPtr.Zero);
-                mciSendString($"close {alias}", null, 0, IntPtr.Zero);
+                if (alias == "mosq_sound" && activeMosquitoBassStream != 0)
+                {
+                    ManagedBass.Bass.ChannelStop(activeMosquitoBassStream);
+                    ManagedBass.Bass.StreamFree(activeMosquitoBassStream);
+                    activeMosquitoBassStream = 0;
+                }
+                else if (alias == "disc_ring" && activeDiscordBassStream != 0)
+                {
+                    ManagedBass.Bass.ChannelStop(activeDiscordBassStream);
+                    ManagedBass.Bass.StreamFree(activeDiscordBassStream);
+                    activeDiscordBassStream = 0;
+                }
+                else if (alias == "tg_ring" && activeTelegramBassStream != 0)
+                {
+                    ManagedBass.Bass.ChannelStop(activeTelegramBassStream);
+                    ManagedBass.Bass.StreamFree(activeTelegramBassStream);
+                    activeTelegramBassStream = 0;
+                }
+                else if (alias == "steam_msg" && activeSteamBassStream != 0)
+                {
+                    ManagedBass.Bass.ChannelStop(activeSteamBassStream);
+                    ManagedBass.Bass.StreamFree(activeSteamBassStream);
+                    activeSteamBassStream = 0;
+                }
+                else if (alias == "door_knock" && activeKnockBassStream != 0)
+                {
+                    ManagedBass.Bass.ChannelStop(activeKnockBassStream);
+                    ManagedBass.Bass.StreamFree(activeKnockBassStream);
+                    activeKnockBassStream = 0;
+                }
+
+                if (OperatingSystem.IsWindows())
+                {
+                    ensureMciThread();
+                    mciCommandQueue.Add($"stop {alias}");
+                    mciCommandQueue.Add($"close {alias}");
+                }
             }
             catch { }
         }
