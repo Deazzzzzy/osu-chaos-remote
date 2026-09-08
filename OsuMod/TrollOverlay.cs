@@ -1535,40 +1535,6 @@ namespace osu.Game.Rulesets.Osu.Mods
                 Alpha = 0
             };
 
-            // Chunky 144p compression macroblocks
-            const int cols = 18;
-            const int rows = 12;
-
-            for (int r = 0; r < rows; r++)
-            {
-                for (int c = 0; c < cols; c++)
-                {
-                    int blockHash = (r * 37) ^ (c * 17);
-                    float baseOpacity = ((r + c) % 2 == 0) ? 0.45f : 0.25f;
-                    Colour4 tint = ((blockHash % 7 == 0)) ? Colour4.FromHex("#182818").Opacity(0.40f)
-                                : ((blockHash % 11 == 0)) ? Colour4.FromHex("#281824").Opacity(0.40f)
-                                : Colour4.Black.Opacity(baseOpacity);
-
-                    container.Add(new Container
-                    {
-                        RelativeSizeAxes = Axes.Both,
-                        RelativePositionAxes = Axes.Both,
-                        Width = 1f / cols,
-                        Height = 1f / rows,
-                        X = c * (1f / cols),
-                        Y = r * (1f / rows),
-                        Masking = true,
-                        BorderThickness = 1,
-                        BorderColour = Colour4.Black.Opacity(0.6f),
-                        Child = new Box
-                        {
-                            RelativeSizeAxes = Axes.Both,
-                            Colour = tint
-                        }
-                    });
-                }
-            }
-
             // Low-resolution 144p quality badge in corner
             container.Add(new Container
             {
