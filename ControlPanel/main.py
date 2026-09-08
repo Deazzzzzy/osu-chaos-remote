@@ -451,6 +451,13 @@ class ModernControlPanel:
         row_barrel.pack(fill=tk.X, pady=2)
         tk.Button(row_barrel, text="🌀 БОЧКА / ВРАЩЕНИЕ ЭКРАНА 360° (3.5s) 🔄", font=("Segoe UI", 9, "bold"), bg="#cba6f7", fg="#11111b", bd=0, command=lambda: self.send_command("BARREL_ROLL")).pack(fill=tk.X, expand=True, padx=2)
 
+        # Фаза 6: Вечная карусель 360° (ВКЛ / ВЫКЛ)
+        row_carousel = tk.Frame(cam_frame, bg=self.panel_color)
+        row_carousel.pack(fill=tk.X, pady=2)
+        tk.Label(row_carousel, text="Вечная карусель 360°:", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=26, anchor=tk.W).pack(side=tk.LEFT)
+        tk.Button(row_carousel, text="ВКЛЮЧИТЬ 🌀", font=("Segoe UI", 9, "bold"), bg="#cba6f7", fg="#11111b", bd=0, command=lambda: self.send_command("CAROUSEL_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(row_carousel, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("CAROUSEL_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+
         # Управление FPS игрока (Фаза 5)
         fps_frame = tk.Frame(cam_frame, bg=self.bg_color, padx=10, pady=8, bd=1, relief=tk.SOLID)
         fps_frame.pack(fill=tk.X, pady=(6, 2))
@@ -505,6 +512,13 @@ class ModernControlPanel:
         tk.Button(row_invert, text="НЕГАТИВ 🌗", font=("Segoe UI", 9, "bold"), bg="#f9e2af", fg="#11111b", bd=0, command=lambda: self.send_command("INVERT_COLORS_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
         tk.Button(row_invert, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("INVERT_COLORS_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
 
+        # Фаза 6: Гравитация нот (Падающие круги)
+        row_gravity = tk.Frame(vis_frame, bg=self.panel_color)
+        row_gravity.pack(fill=tk.X, pady=2)
+        tk.Label(row_gravity, text="Гравитация (Падающие ноты):", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=26, anchor=tk.W).pack(side=tk.LEFT)
+        tk.Button(row_gravity, text="ВКЛЮЧИТЬ 🧲", font=("Segoe UI", 9, "bold"), bg=self.accent_on, fg="#11111b", bd=0, command=lambda: self.send_command("GRAVITY_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(row_gravity, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("GRAVITY_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+
         # --- СЕКЦИЯ: ТУННЕЛЬНОЕ ЗРЕНИЕ & НЕВИДИМЫЕ СЛАЙДЕРЫ (НОВОЕ В ФАЗЕ 4) ---
         tunnel_frame = tk.Frame(tab2, bg=self.panel_color, padx=15, pady=12)
         tunnel_frame.pack(fill=tk.X, pady=5)
@@ -556,6 +570,14 @@ class ModernControlPanel:
         self.lbl_reverb.pack(side=tk.LEFT)
         tk.Button(row_reverb, text="ВКЛЮЧИТЬ ЭХО ⛪", font=("Segoe UI", 9, "bold"), bg="#cba6f7", fg="#11111b", bd=0, command=lambda: self.send_command("REVERB_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
         tk.Button(row_reverb, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("REVERB_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+
+        # Фаза 6: Bass Boost / Ear Rape (Переключаемый)
+        row_bass = tk.Frame(audio_frame, bg=self.panel_color)
+        row_bass.pack(fill=tk.X, pady=2)
+        tk.Label(row_bass, text="Bass Boost / Ear Rape:", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=26, anchor=tk.W)
+        self.lbl_bass.pack(side=tk.LEFT)
+        tk.Button(row_bass, text="ВКЛЮЧИТЬ БАС 📢", font=("Segoe UI", 9, "bold"), bg=self.accent_on, fg="#11111b", bd=0, command=lambda: self.send_command("BASS_BOOST_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(row_bass, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("BASS_BOOST_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
 
         # --- СЕКЦИЯ: ЗЕМЛЕТРЯСЕНИЕ (СЛАЙДЕР СИЛЫ) ---
         earth_frame = tk.Frame(tab2, bg=self.panel_color, padx=15, pady=10)
@@ -772,6 +794,33 @@ class ModernControlPanel:
         tk.Label(row_watermark, text="Водяной знак Активация Windows:", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=30, anchor=tk.W).pack(side=tk.LEFT)
         tk.Button(row_watermark, text="ВКЛЮЧИТЬ", font=("Segoe UI", 9, "bold"), bg=self.accent_on, fg="#11111b", bd=0, command=lambda: self.send_command("WATERMARK_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
         tk.Button(row_watermark, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("WATERMARK_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+
+        # Фаза 6: Троллинг звуками и эффектами
+        # Ряд 10: Стук в дверь
+        row_knock = tk.Frame(troll_frame, bg=self.panel_color)
+        row_knock.pack(fill=tk.X, pady=2)
+        tk.Button(row_knock, text="🚪 3D СТУК В ДВЕРЬ (ЗВУК ЗА СПИНОЙ) 🔊", font=("Segoe UI", 9, "bold"), bg="#fab387", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:KNOCK")).pack(fill=tk.X, expand=True, padx=2)
+
+        # Ряд 11: Писк комара (3 звука отдельно + Стоп)
+        row_mosq = tk.Frame(troll_frame, bg=self.panel_color)
+        row_mosq.pack(fill=tk.X, pady=2)
+        tk.Label(row_mosq, text="🦟 Комар:", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=10, anchor=tk.W).pack(side=tk.LEFT)
+        tk.Button(row_mosq, text="Звук 1 🦟", font=("Segoe UI", 9, "bold"), bg="#a6e3a1", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:MOSQUITO:1")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
+        tk.Button(row_mosq, text="Звук 2 🦟", font=("Segoe UI", 9, "bold"), bg="#f9e2af", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:MOSQUITO:2")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
+        tk.Button(row_mosq, text="Звук 3 🦟", font=("Segoe UI", 9, "bold"), bg="#fab387", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:MOSQUITO:3")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
+        tk.Button(row_mosq, text="⏹️ Стоп", font=("Segoe UI", 9, "bold"), bg="#f38ba8", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:MOSQUITO:STOP")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
+
+        # Ряд 12: Сбой видеодрайвера
+        row_gpu = tk.Frame(troll_frame, bg=self.panel_color)
+        row_gpu.pack(fill=tk.X, pady=2)
+        tk.Button(row_gpu, text="🔌 СБОЙ ВИДЕОДРАЙВЕРА (ЧЕРНЫЙ ЭКРАН 1.3s + ВОССТАНОВЛЕНИЕ) ⚠️", font=("Segoe UI", 9, "bold"), bg="#76b900", fg="#ffffff", bd=0, command=lambda: self.send_command("TROLL:GPU_CRASH")).pack(fill=tk.X, expand=True, padx=2)
+
+        # Ряд 13: Муха на мониторе
+        row_fly = tk.Frame(troll_frame, bg=self.panel_color)
+        row_fly.pack(fill=tk.X, pady=2)
+        tk.Label(row_fly, text="🪰 Муха на мониторе:", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=22, anchor=tk.W).pack(side=tk.LEFT)
+        tk.Button(row_fly, text="ВКЛЮЧИТЬ 🪰", font=("Segoe UI", 9, "bold"), bg=self.accent_on, fg="#11111b", bd=0, command=lambda: self.send_command("FLY_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(row_fly, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("FLY_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
 
         # ==========================================
         # Вкладка 5: ГАЛЛЮЦИНАЦИИ

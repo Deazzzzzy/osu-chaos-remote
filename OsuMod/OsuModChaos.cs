@@ -151,6 +151,13 @@ namespace osu.Game.Rulesets.Osu.Mods
         public static volatile bool IsReverbActive = false;
         private BusyCursorDrawable? busyCursorDrawable;
 
+        // Phase 6 Features
+        public static volatile bool IsGravityActive = false;
+        public static volatile bool IsCarouselActive = false;
+        public static volatile bool IsFlyActive = false;
+        public static volatile bool IsBassBoostActive = false;
+        private FlyOverlay? flyOverlay;
+
         public static Playfield? CurrentPlayfield;
         public static GameplayCursorContainer? GameplayCursorInstance;
         private TrollOverlay? trollOverlay;
@@ -529,6 +536,30 @@ namespace osu.Game.Rulesets.Osu.Mods
                                 else if (msg == "TAPE_STOP") TriggerTapeStop = true;
                                 else if (msg == "REVERB_ON") IsReverbActive = true;
                                 else if (msg == "REVERB_OFF") IsReverbActive = false;
+
+                                // Phase 6 Commands
+                                else if (msg == "TROLL_KNOCK" || msg == "TROLL:KNOCK") TrollOverlay.ActiveInstance?.PlayDoorKnock();
+                                else if (msg == "TROLL:MOSQUITO:1" || msg == "MOSQUITO_1") TrollOverlay.ActiveInstance?.PlayMosquito(1);
+                                else if (msg == "TROLL:MOSQUITO:2" || msg == "MOSQUITO_2") TrollOverlay.ActiveInstance?.PlayMosquito(2);
+                                else if (msg == "TROLL:MOSQUITO:3" || msg == "MOSQUITO_3") TrollOverlay.ActiveInstance?.PlayMosquito(3);
+                                else if (msg == "TROLL:MOSQUITO:STOP" || msg == "MOSQUITO_STOP") TrollOverlay.ActiveInstance?.StopMosquito();
+                                else if (msg == "TROLL_GPU_CRASH" || msg == "TROLL:GPU_CRASH") TrollOverlay.ActiveInstance?.ShowGpuDriverCrash();
+                                else if (msg == "BASS_BOOST_ON")
+                                {
+                                    IsBassBoostActive = true;
+                                    TrollOverlay.ActiveInstance?.SetBassBoost(true);
+                                }
+                                else if (msg == "BASS_BOOST_OFF")
+                                {
+                                    IsBassBoostActive = false;
+                                    TrollOverlay.ActiveInstance?.SetBassBoost(false);
+                                }
+                                else if (msg == "FLY_ON") IsFlyActive = true;
+                                else if (msg == "FLY_OFF") IsFlyActive = false;
+                                else if (msg == "CAROUSEL_ON") IsCarouselActive = true;
+                                else if (msg == "CAROUSEL_OFF") IsCarouselActive = false;
+                                else if (msg == "GRAVITY_ON") IsGravityActive = true;
+                                else if (msg == "GRAVITY_OFF") IsGravityActive = false;
                             }
                         }
                     }
@@ -619,6 +650,9 @@ namespace osu.Game.Rulesets.Osu.Mods
             busyCursorDrawable = new BusyCursorDrawable();
             busyCursorOverlay.Add(busyCursorDrawable);
             drawableRuleset.Overlays.Add(busyCursorOverlay);
+
+            flyOverlay = new FlyOverlay { Depth = float.MinValue + 5 };
+            drawableRuleset.Overlays.Add(flyOverlay);
         }
 
         private Container? busyCursorOverlay;
@@ -1036,10 +1070,25 @@ namespace osu.Game.Rulesets.Osu.Mods
                     busyCursorOverlay.Alpha = 0f;
                 }
             }
+
+            if (flyOverlay != null)
+            {
+                flyOverlay.IsActive = IsFlyActive;
+                Vector2? screenCursor = null;
+                if (playfield.Cursor is OsuCursorContainer curContainer && curContainer.ActiveCursor != null)
+                    screenCursor = curContainer.ActiveCursor.ToScreenSpace(Vector2.Zero);
+                flyOverlay.UpdateFly(playfield, screenCursor);
+            }
             
-            // --- Положение, вращение (Пьяная камера, Тряска, Землетрясение, Бочка 360°) и масштаб ---
+            // --- Положение, вращение (Пьяная камера, Тряска, Землетрясение, Бочка 360°, Карусель) и масштаб ---
             float totalRotation = 0f;
             Vector2 totalPosition = Vector2.Zero;
+
+            if (IsCarouselActive)
+            {
+                float carouselAngle = (float)((playfield.Time.Current / 1000.0) * (360f / 6.0f)) % 360f;
+                totalRotation += carouselAngle;
+            }
 
             if (TriggerBarrelRoll)
             {
@@ -1150,6 +1199,13 @@ namespace osu.Game.Rulesets.Osu.Mods
                     drawable.Rotation = (float)(rnd.NextDouble() * 20 - 10) * ChaosStrength;
                     float alphaBase = 1.0f - (0.8f * ChaosStrength);
                     drawable.Alpha = (float)(alphaBase + rnd.NextDouble() * (1.0f - alphaBase));
+                }
+
+                // Гравитация (Падающие ноты)
+                if (IsGravityActive)
+                {
+                    float fallSpeed = (elapsed / 1000f) * 260f;
+                    drawable.Y += fallSpeed;
                 }
 
                 // Ветер (снос нот)

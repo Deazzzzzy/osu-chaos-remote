@@ -70,6 +70,19 @@ namespace osu.Game.Rulesets.Osu.Mods
         private static string? localAudioPath;
         private ITrack? telegramTrack;
         private static string? localTelegramAudioPath;
+        private Container gpuCrashContainer = null!;
+        private Container gpuDriverToast = null!;
+        private ITrack? knockTrack;
+        private static string? localKnockPath;
+        private ITrack? mosquitoTrack1;
+        private static string? localMosquitoPath1;
+        private ITrack? mosquitoTrack2;
+        private static string? localMosquitoPath2;
+        private ITrack? mosquitoTrack3;
+        private static string? localMosquitoPath3;
+
+        private ManagedBass.Fx.BQFParameters? bassBoostFilter;
+        private osu.Framework.Audio.Mixing.AudioMixer? trackMixer;
         private ITrack? steamTrack;
         private static string? localSteamAudioPath;
 
@@ -107,8 +120,18 @@ namespace osu.Game.Rulesets.Osu.Mods
             invertColorsContainer = createInvertColorsContainer();
             mosaicContainer = createMosaicContainer();
 
+            trackMixer = audio.TrackMixer;
+            knockTrack = loadSingleTrack(audio, "stuk-v-dver_BGgu9hKn.mp3", "stuk-v-dver_BGgu9hKn.mp3", ref localKnockPath, false);
+            mosquitoTrack1 = loadSingleTrack(audio, "1.mp3", "1.mp3", ref localMosquitoPath1, true);
+            mosquitoTrack2 = loadSingleTrack(audio, "2.mp3", "2.mp3", ref localMosquitoPath2, true);
+            mosquitoTrack3 = loadSingleTrack(audio, "3.mp3", "3.mp3", ref localMosquitoPath3, true);
+
+            gpuCrashContainer = createGpuCrashContainer();
+            gpuDriverToast = createGpuDriverToast();
+
             var children = new List<Drawable>
             {
+                gpuCrashContainer,
                 mosaicContainer,
                 invertColorsContainer,
                 bsodContainer,
@@ -122,6 +145,7 @@ namespace osu.Game.Rulesets.Osu.Mods
                 donationToast,
                 stickyKeysDialog,
                 windowsWatermarkContainer,
+                gpuDriverToast,
             };
 
             try
@@ -518,6 +542,82 @@ namespace osu.Game.Rulesets.Osu.Mods
             };
         }
 
+        private Container createGpuCrashContainer()
+        {
+            return new Container
+            {
+                RelativeSizeAxes = Axes.Both,
+                Anchor = Anchor.TopLeft,
+                Origin = Anchor.TopLeft,
+                Depth = float.MinValue + 10,
+                Alpha = 0,
+                Child = new Box
+                {
+                    RelativeSizeAxes = Axes.Both,
+                    Colour = Colour4.Black
+                }
+            };
+        }
+
+        private Container createGpuDriverToast()
+        {
+            return new Container
+            {
+                Anchor = Anchor.BottomRight,
+                Origin = Anchor.BottomRight,
+                Position = new Vector2(-25, -25),
+                Size = new Vector2(380, 115),
+                Masking = true,
+                CornerRadius = 8,
+                BorderThickness = 1,
+                BorderColour = Colour4.FromHex("#383838"),
+                Alpha = 0,
+                Children = new Drawable[]
+                {
+                    new Box
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Colour = Colour4.FromHex("#1f1f1f")
+                    },
+                    new SpriteIcon
+                    {
+                        Icon = FontAwesome.Solid.Microchip,
+                        Size = new Vector2(16),
+                        Colour = Colour4.FromHex("#76b900"),
+                        Position = new Vector2(14, 10)
+                    },
+                    new OsuSpriteText
+                    {
+                        Text = "Графическая подсистема Windows",
+                        Font = OsuFont.GetFont(size: 11),
+                        Colour = Colour4.FromHex("#999999"),
+                        Position = new Vector2(36, 10)
+                    },
+                    new SpriteIcon
+                    {
+                        Icon = FontAwesome.Solid.ExclamationTriangle,
+                        Size = new Vector2(26),
+                        Colour = Colour4.FromHex("#f1c40f"),
+                        Position = new Vector2(16, 40)
+                    },
+                    new OsuSpriteText
+                    {
+                        Text = "Видеодрайвер был успешно восстановлен",
+                        Font = OsuFont.GetFont(size: 14, weight: FontWeight.Bold),
+                        Colour = Colour4.White,
+                        Position = new Vector2(50, 36)
+                    },
+                    new OsuSpriteText
+                    {
+                        Text = "Драйвер NVIDIA Windows Kernel Mode Driver перестал\nотвечать и был успешно перезапущен.",
+                        Font = OsuFont.GetFont(size: 11),
+                        Colour = Colour4.FromHex("#b0b0b0"),
+                        Position = new Vector2(50, 58)
+                    }
+                }
+            };
+        }
+
         private static void playSystemSound(uint soundType)
         {
             if (OperatingSystem.IsWindows())
@@ -804,6 +904,135 @@ namespace osu.Game.Rulesets.Osu.Mods
                 mosaicContainer.FadeTo(1f, 150, Easing.OutCubic);
             else
                 mosaicContainer.FadeOut(150, Easing.InCubic);
+        }
+
+        public void PlayDoorKnock()
+        {
+            knockTrack?.Seek(0);
+            knockTrack?.Start();
+
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    string target = localKnockPath ?? @"C:\Users\dizzy\Downloads\Osu_Debuffs\osu\osu.Game.Rulesets.Osu\Mods\stuk-v-dver_BGgu9hKn.mp3";
+                    if (File.Exists(target))
+                    {
+                        mciSendString("close door_knock", null, 0, IntPtr.Zero);
+                        mciSendString($"open \"{target}\" type mpegvideo alias door_knock", null, 0, IntPtr.Zero);
+                        mciSendString("play door_knock", null, 0, IntPtr.Zero);
+                    }
+                }
+                catch { }
+            }
+        }
+
+        public void StopMosquito()
+        {
+            mosquitoTrack1?.Stop();
+            mosquitoTrack2?.Stop();
+            mosquitoTrack3?.Stop();
+
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    mciSendString("stop mosq_sound", null, 0, IntPtr.Zero);
+                    mciSendString("close mosq_sound", null, 0, IntPtr.Zero);
+                }
+                catch { }
+            }
+        }
+
+        public void PlayMosquito(int id)
+        {
+            StopMosquito();
+
+            ITrack? track = id == 1 ? mosquitoTrack1 : (id == 2 ? mosquitoTrack2 : mosquitoTrack3);
+            track?.Seek(0);
+            track?.Start();
+
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    string defaultFile = id == 1 ? "1.mp3" : (id == 2 ? "2.mp3" : "3.mp3");
+                    string? localPath = id == 1 ? localMosquitoPath1 : (id == 2 ? localMosquitoPath2 : localMosquitoPath3);
+                    string target = localPath ?? Path.Combine(@"C:\Users\dizzy\Downloads\Osu_Debuffs\osu\osu.Game.Rulesets.Osu\Mods", defaultFile);
+
+                    if (File.Exists(target))
+                    {
+                        mciSendString("close mosq_sound", null, 0, IntPtr.Zero);
+                        mciSendString($"open \"{target}\" type mpegvideo alias mosq_sound", null, 0, IntPtr.Zero);
+                        mciSendString("play mosq_sound", null, 0, IntPtr.Zero);
+                    }
+                }
+                catch { }
+            }
+        }
+
+        public void ShowGpuDriverCrash()
+        {
+            gpuCrashContainer.ClearTransforms();
+            gpuCrashContainer.FadeIn(30);
+            OsuModChaos.IsMouseDisconnected = true;
+
+            if (OperatingSystem.IsWindows() && File.Exists(@"C:\Windows\Media\Windows Hardware Remove.wav"))
+                PlaySound(@"C:\Windows\Media\Windows Hardware Remove.wav", IntPtr.Zero, SND_ASYNC | SND_FILENAME);
+            else
+                playSystemSound(mb_iconhand);
+
+            Scheduler.AddDelayed(() =>
+            {
+                gpuCrashContainer.FadeOut(100);
+                OsuModChaos.IsMouseDisconnected = false;
+
+                if (OperatingSystem.IsWindows() && File.Exists(@"C:\Windows\Media\Windows Hardware Insert.wav"))
+                    PlaySound(@"C:\Windows\Media\Windows Hardware Insert.wav", IntPtr.Zero, SND_ASYNC | SND_FILENAME);
+                else
+                    playSystemSound(mb_iconasterisk);
+
+                gpuDriverToast.ClearTransforms();
+                gpuDriverToast.Alpha = 0;
+                gpuDriverToast.X = 400;
+                gpuDriverToast.FadeIn(150);
+                gpuDriverToast.MoveToX(-25, 280, Easing.OutCubic)
+                    .Delay(4500)
+                    .MoveToX(400, 250, Easing.InCubic)
+                    .FadeOut(250);
+            }, 1300);
+        }
+
+        public void SetBassBoost(bool active)
+        {
+            if (trackMixer == null) return;
+
+            if (bassBoostFilter == null)
+            {
+                bassBoostFilter = new ManagedBass.Fx.BQFParameters
+                {
+                    lFilter = ManagedBass.Fx.BQFType.LowShelf,
+                    fCenter = 100f,
+                    fGain = 20f,
+                    fQ = 0.7f,
+                    fBandwidth = 0f
+                };
+            }
+
+            try
+            {
+                if (active)
+                {
+                    trackMixer.AddEffect(bassBoostFilter);
+                    bassBoostFilter.fGain = 20f;
+                    trackMixer.UpdateEffect(bassBoostFilter);
+                }
+                else
+                {
+                    trackMixer.RemoveEffect(bassBoostFilter);
+                }
+            }
+            catch { }
         }
 
         public void ApplyFpsLimit(int fps)

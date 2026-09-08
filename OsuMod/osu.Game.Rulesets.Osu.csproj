@@ -23,5 +23,41 @@
     <None Include="Mods\call_calling.mp3">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <EmbeddedResource Include="Mods\telegram-zvonok-pk.mp3">
+      <LogicalName>telegram-zvonok-pk.mp3</LogicalName>
+    </EmbeddedResource>
+    <None Include="Mods\telegram-zvonok-pk.mp3">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <EmbeddedResource Include="Mods\steam-.mp3">
+      <LogicalName>steam-.mp3</LogicalName>
+    </EmbeddedResource>
+    <None Include="Mods\steam-.mp3">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <EmbeddedResource Include="Mods\stuk-v-dver_BGgu9hKn.mp3">
+      <LogicalName>stuk-v-dver_BGgu9hKn.mp3</LogicalName>
+    </EmbeddedResource>
+    <None Include="Mods\stuk-v-dver_BGgu9hKn.mp3">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <EmbeddedResource Include="Mods\1.mp3">
+      <LogicalName>1.mp3</LogicalName>
+    </EmbeddedResource>
+    <None Include="Mods\1.mp3">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <EmbeddedResource Include="Mods\2.mp3">
+      <LogicalName>2.mp3</LogicalName>
+    </EmbeddedResource>
+    <None Include="Mods\2.mp3">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <EmbeddedResource Include="Mods\3.mp3">
+      <LogicalName>3.mp3</LogicalName>
+    </EmbeddedResource>
+    <None Include="Mods\3.mp3">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 </Project>
