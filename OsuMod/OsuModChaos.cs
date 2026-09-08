@@ -149,7 +149,7 @@ namespace osu.Game.Rulesets.Osu.Mods
         public static volatile bool TriggerTapeStop = false;
         private static readonly System.Diagnostics.Stopwatch tapeStopTimer = new System.Diagnostics.Stopwatch();
         public static volatile bool IsReverbActive = false;
-        private SpriteIcon? busyCursorIcon;
+        private BusyCursorDrawable? busyCursorDrawable;
 
         public static Playfield? CurrentPlayfield;
         public static GameplayCursorContainer? GameplayCursorInstance;
@@ -616,14 +616,8 @@ namespace osu.Game.Rulesets.Osu.Mods
                 AlwaysPresent = true,
                 Alpha = 0
             };
-            busyCursorIcon = new SpriteIcon
-            {
-                Origin = Anchor.Centre,
-                Icon = FontAwesome.Solid.CircleNotch,
-                Size = new Vector2(30),
-                Colour = Colour4.FromHex("#00a2ed")
-            };
-            busyCursorOverlay.Add(busyCursorIcon);
+            busyCursorDrawable = new BusyCursorDrawable();
+            busyCursorOverlay.Add(busyCursorDrawable);
             drawableRuleset.Overlays.Add(busyCursorOverlay);
         }
 
@@ -1031,12 +1025,11 @@ namespace osu.Game.Rulesets.Osu.Mods
                     osuCursorContainer.ActiveCursor.ModScaleAdjust.Value = CursorScaleMultiplier;
                 }
 
-                if (IsBusyCursorActive && busyCursorOverlay != null && busyCursorIcon != null)
+                if (IsBusyCursorActive && busyCursorOverlay != null && busyCursorDrawable != null)
                 {
                     busyCursorOverlay.Alpha = 1f;
                     Vector2 screenPos = osuCursorContainer.ActiveCursor.ToScreenSpace(Vector2.Zero);
-                    busyCursorIcon.Position = busyCursorOverlay.ToLocalSpace(screenPos) + new Vector2(8, 8);
-                    busyCursorIcon.Rotation += (elapsed / 1000f) * 720f;
+                    busyCursorDrawable.Position = busyCursorOverlay.ToLocalSpace(screenPos) + new Vector2(8, 8);
                 }
                 else if (busyCursorOverlay != null)
                 {
