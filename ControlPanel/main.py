@@ -117,9 +117,29 @@ class ModernControlPanel:
         self.root.bind("<Control-f>", lambda e: self.focus_search())
         self.root.bind("<Control-F>", lambda e: self.focus_search())
         self.root.bind("<Escape>", lambda e: self.on_escape_key())
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
         # Запуск фонового пинга сокета osu!
         self.start_ping_thread()
+
+    def on_close(self):
+        self._stop_ping.set()
+        if self._countdown_job is not None:
+            try:
+                self.root.after_cancel(self._countdown_job)
+            except Exception:
+                pass
+        self.root.destroy()
+
+    def get_ip(self):
+        try:
+            if hasattr(self, "ip_entry") and self.ip_entry.winfo_exists():
+                val = self.ip_entry.get().strip()
+                if val:
+                    return val
+        except Exception:
+            pass
+        return "127.0.0.1"
 
     def setup_styles(self):
         style = ttk.Style()
@@ -1508,7 +1528,7 @@ class ModernControlPanel:
         ))
 
     def _execute_send(self, command: str):
-        ip = self.ip_entry.get().strip()
+        ip = self.get_ip()
         def task():
             try:
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -1516,9 +1536,10 @@ class ModernControlPanel:
                 s.connect((ip, 9000))
                 s.send(command.encode("utf-8"))
                 s.close()
-                self.root.after(0, lambda: self._on_send_success(command))
+                self.root.after(0, lambda c=command: self._on_send_success(c))
             except Exception as ex:
-                self.root.after(0, lambda: self._on_send_failure(command, str(ex)))
+                err_msg = str(ex)
+                self.root.after(0, lambda c=command, err=err_msg: self._on_send_failure(c, err))
         threading.Thread(target=task, daemon=True).start()
 
     def _on_send_success(self, command: str):
@@ -1593,7 +1614,7 @@ class ModernControlPanel:
     # =========================================================================
     def reset_all_debuffs(self):
         self.cancel_countdown()
-        self.status_label.config(text="🚨 ЭКСТРЕННЫЙ СБРОС ВСЕХ ДЕБАФФОВ...", fg=self.accent_yellow)
+        self.status_label.config(text="🚨 СБРОС ВСЕХ ДЕБАФФОВ...", fg=self.accent_yellow)
 
         commands_to_reset = [
             "CHAOS_OFF", "WIND_OFF", "MAGNET_OFF", "BLACK_HOLE_OFF",
@@ -1623,8 +1644,25 @@ class ModernControlPanel:
         if hasattr(self, "fps_scale"): self.fps_scale.set(60)
         if hasattr(self, "desync_scale"): self.desync_scale.set(0)
 
-        ip = self.ip_entry.get().strip()
+        ip = self.get_ip()
         def _send_all():
+            # Сначала проверяем доступность сокета одним быстрым подключением
+            try:
+                test_s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                test_s.settimeout(0.35)
+                test_s.connect((ip, 9000))
+                test_s.send("CHAOS_RESET".encode("utf-8"))
+                test_s.close()
+            except Exception:
+                # osu! не запущен или сокет закрыт — локальный сброс уже выполнен
+                self.root.after(0, lambda: self.status_label.config(
+                    text="✔ Локальные переключатели сброшены (osu! не в сети)",
+                    fg=self.accent_yellow
+                ))
+                self.root.after(0, lambda: self._set_ping_status(False))
+                return
+
+            # Если сокет открыт, отправляем все команды сброса
             try:
                 for cmd in commands_to_reset:
                     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -1632,10 +1670,18 @@ class ModernControlPanel:
                     s.connect((ip, 9000))
                     s.send(cmd.encode("utf-8"))
                     s.close()
-                    time.sleep(0.01)
-                self.root.after(0, lambda: self.status_label.config(text="✔ Все дебаффы успешно сброшены в норму!", fg=self.accent_green))
+                    time.sleep(0.005)
+                self.root.after(0, lambda: self.status_label.config(
+                    text="✔ Все дебаффы успешно сброшены в osu!",
+                    fg=self.accent_green
+                ))
+                self.root.after(0, lambda: self._set_ping_status(True))
             except Exception as ex:
-                self.root.after(0, lambda: self.status_label.config(text=f"✖ Ошибка сброса: {ex}", fg=self.accent_red))
+                err_msg = str(ex)
+                self.root.after(0, lambda err=err_msg: self.status_label.config(
+                    text=f"✖ Ошибка сброса: {err}",
+                    fg=self.accent_red
+                ))
 
         threading.Thread(target=_send_all, daemon=True).start()
 
@@ -1645,15 +1691,17 @@ class ModernControlPanel:
     def start_ping_thread(self):
         def _worker():
             while not self._stop_ping.is_set():
-                ip = self.ip_entry.get().strip()
+                ip = self.get_ip()
                 try:
                     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     s.settimeout(0.3)
                     s.connect((ip, 9000))
                     s.close()
-                    self.root.after(0, lambda: self._set_ping_status(True))
+                    if not self._stop_ping.is_set():
+                        self.root.after(0, lambda: self._set_ping_status(True))
                 except Exception:
-                    self.root.after(0, lambda: self._set_ping_status(False))
+                    if not self._stop_ping.is_set():
+                        self.root.after(0, lambda: self._set_ping_status(False))
                 time.sleep(2.5)
 
         t = threading.Thread(target=_worker, daemon=True)
@@ -1661,7 +1709,7 @@ class ModernControlPanel:
 
     def check_connection_now(self):
         self.ping_indicator.config(text="● ПРОВЕРКА...", fg=self.accent_yellow)
-        ip = self.ip_entry.get().strip()
+        ip = self.get_ip()
         def _check():
             try:
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
