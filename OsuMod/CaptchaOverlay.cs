@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using osu.Framework.Allocation;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Input.Events;
+using osu.Framework.Platform;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Sprites;
 using osuTK;
@@ -29,7 +31,7 @@ namespace osu.Game.Rulesets.Osu.Mods
         public CaptchaOverlay()
         {
             RelativeSizeAxes = Axes.Both;
-            Depth = float.MinValue + 25;
+            Depth = -999999f;
             AlwaysPresent = true;
             Alpha = 0;
 
@@ -38,39 +40,63 @@ namespace osu.Game.Rulesets.Osu.Mods
                 dimBackdrop = new Box
                 {
                     RelativeSizeAxes = Axes.Both,
-                    Colour = Colour4.Black.Opacity(0.70f)
+                    Colour = Colour4.Black.Opacity(0.88f)
                 },
                 modalCard = new Container
                 {
                     Anchor = Anchor.Centre,
                     Origin = Anchor.Centre,
-                    Width = 520,
+                    Width = 620,
                     AutoSizeAxes = Axes.Y,
                     Masking = true,
-                    CornerRadius = 14,
-                    BorderThickness = 2f,
-                    BorderColour = Colour4.FromHex("#45475a"),
+                    CornerRadius = 18,
+                    BorderThickness = 3f,
+                    BorderColour = Colour4.FromHex("#89b4fa"),
                     Children = new Drawable[]
                     {
                         new Box
                         {
                             RelativeSizeAxes = Axes.Both,
-                            Colour = Colour4.FromHex("#181825")
+                            Colour = Colour4.FromHex("#1e1e2e")
                         },
                         new FillFlowContainer
                         {
                             RelativeSizeAxes = Axes.X,
                             AutoSizeAxes = Axes.Y,
                             Direction = FillDirection.Vertical,
-                            Padding = new MarginPadding(20),
-                            Spacing = new Vector2(0, 14),
+                            Padding = new MarginPadding(22),
+                            Spacing = new Vector2(0, 16),
                             Children = new Drawable[]
                             {
+                                // Top Pause Status Banner
+                                new Container
+                                {
+                                    Anchor = Anchor.TopCentre,
+                                    Origin = Anchor.TopCentre,
+                                    AutoSizeAxes = Axes.Both,
+                                    Masking = true,
+                                    CornerRadius = 6,
+                                    Children = new Drawable[]
+                                    {
+                                        new Box
+                                        {
+                                            RelativeSizeAxes = Axes.Both,
+                                            Colour = Colour4.FromHex("#313244")
+                                        },
+                                        new OsuSpriteText
+                                        {
+                                            Padding = new MarginPadding { Horizontal = 14, Vertical = 5 },
+                                            Text = "⏸️ ИГРА ПРИОСТАНОВЛЕНА — РЕШИТЕ ЗАДАНИЕ ДЛЯ ПРОДОЛЖЕНИЯ",
+                                            Font = OsuFont.GetFont(size: 11, weight: FontWeight.Bold),
+                                            Colour = Colour4.FromHex("#fab387")
+                                        }
+                                    }
+                                },
                                 // Header bar
                                 new Container
                                 {
                                     RelativeSizeAxes = Axes.X,
-                                    Height = 44,
+                                    Height = 48,
                                     Children = new Drawable[]
                                     {
                                         headerIcon = new SpriteIcon
@@ -78,14 +104,14 @@ namespace osu.Game.Rulesets.Osu.Mods
                                             Anchor = Anchor.CentreLeft,
                                             Origin = Anchor.CentreLeft,
                                             Icon = FontAwesome.Solid.ShieldAlt,
-                                            Size = new Vector2(28),
-                                            Colour = Colour4.FromHex("#fab387")
+                                            Size = new Vector2(34),
+                                            Colour = Colour4.FromHex("#89b4fa")
                                         },
                                         new FillFlowContainer
                                         {
                                             Anchor = Anchor.CentreLeft,
                                             Origin = Anchor.CentreLeft,
-                                            Position = new Vector2(40, 0),
+                                            Position = new Vector2(46, 0),
                                             Direction = FillDirection.Vertical,
                                             AutoSizeAxes = Axes.Both,
                                             Children = new Drawable[]
@@ -93,14 +119,14 @@ namespace osu.Game.Rulesets.Osu.Mods
                                                 titleText = new OsuSpriteText
                                                 {
                                                     Text = "ПРОВЕРКА НА ЧЕЛОВЕКА",
-                                                    Font = OsuFont.GetFont(size: 16, weight: FontWeight.Bold),
-                                                    Colour = Colour4.FromHex("#fab387")
+                                                    Font = OsuFont.GetFont(size: 20, weight: FontWeight.Bold),
+                                                    Colour = Colour4.White
                                                 },
                                                 subtitleText = new OsuSpriteText
                                                 {
-                                                    Text = "Решите задание курсором, чтобы продолжить игру",
-                                                    Font = OsuFont.GetFont(size: 12),
-                                                    Colour = Colour4.FromHex("#a6adc8")
+                                                    Text = "Выберите правильный ответ курсором, чтобы продолжить игру",
+                                                    Font = OsuFont.GetFont(size: 13, weight: FontWeight.SemiBold),
+                                                    Colour = Colour4.FromHex("#bac2de")
                                                 }
                                             }
                                         }
@@ -110,8 +136,8 @@ namespace osu.Game.Rulesets.Osu.Mods
                                 new Box
                                 {
                                     RelativeSizeAxes = Axes.X,
-                                    Height = 1,
-                                    Colour = Colour4.FromHex("#313244")
+                                    Height = 2,
+                                    Colour = Colour4.FromHex("#45475a")
                                 },
                                 // Dynamic Challenge Content Area
                                 contentContainer = new Container
@@ -125,6 +151,16 @@ namespace osu.Game.Rulesets.Osu.Mods
                 }
             };
         }
+
+        [BackgroundDependencyLoader]
+        private void load(GameHost host)
+        {
+            Clock = host.UpdateThread.Clock;
+            ProcessCustomClock = false;
+        }
+
+        protected override bool OnMouseDown(MouseDownEvent e) => true;
+        protected override bool OnClick(ClickEvent e) => true;
 
         public void ShowCaptcha(string mode = "RANDOM")
         {
@@ -159,11 +195,13 @@ namespace osu.Game.Rulesets.Osu.Mods
             }
 
             modalCard.ClearTransforms();
-            modalCard.Scale = new Vector2(0.9f);
+            modalCard.Scale = new Vector2(0.85f);
             modalCard.X = 0;
-            modalCard.ScaleTo(1.0f, 300, Easing.OutBack);
+            modalCard.ScaleTo(1.0f, 250, Easing.OutBack);
 
-            this.FadeIn(200);
+            dimBackdrop.FadeTo(0.88f, 150);
+            modalCard.FadeIn(150);
+            this.FadeIn(150);
             IsActive = true;
 
             TrollOverlay.PlayWindowsSound("Windows Exclamation.wav");
@@ -176,10 +214,10 @@ namespace osu.Game.Rulesets.Osu.Mods
 
             Scheduler.AddDelayed(() =>
             {
-                this.FadeOut(250);
+                this.FadeOut(200);
                 IsActive = false;
                 OnSolved?.Invoke();
-            }, 300);
+            }, 250);
         }
 
         private void handleFailure()
@@ -188,11 +226,11 @@ namespace osu.Game.Rulesets.Osu.Mods
             OnFailed?.Invoke();
 
             // Shake animation
-            modalCard.MoveToX(-18, 50, Easing.OutSine)
-                .Then().MoveToX(18, 100, Easing.InOutSine)
-                .Then().MoveToX(-12, 80, Easing.InOutSine)
-                .Then().MoveToX(12, 70, Easing.InOutSine)
-                .Then().MoveToX(0, 50, Easing.InSine);
+            modalCard.MoveToX(-20, 45, Easing.OutSine)
+                .Then().MoveToX(20, 90, Easing.InOutSine)
+                .Then().MoveToX(-14, 75, Easing.InOutSine)
+                .Then().MoveToX(14, 65, Easing.InOutSine)
+                .Then().MoveToX(0, 45, Easing.InSine);
 
             modalCard.FlashColour(Colour4.FromHex("#f38ba8"), 350);
 
@@ -201,7 +239,7 @@ namespace osu.Game.Rulesets.Osu.Mods
             {
                 if (IsActive)
                     ShowCaptcha("RANDOM");
-            }, 450);
+            }, 400);
         }
 
         #region Challenge 1: Math Equation
@@ -266,9 +304,11 @@ namespace osu.Game.Rulesets.Osu.Mods
             flow.Add(new Container
             {
                 RelativeSizeAxes = Axes.X,
-                Height = 60,
+                Height = 72,
                 Masking = true,
-                CornerRadius = 8,
+                CornerRadius = 12,
+                BorderThickness = 2f,
+                BorderColour = Colour4.FromHex("#45475a"),
                 Children = new Drawable[]
                 {
                     new Box
@@ -281,8 +321,8 @@ namespace osu.Game.Rulesets.Osu.Mods
                         Anchor = Anchor.Centre,
                         Origin = Anchor.Centre,
                         Text = eqStr,
-                        Font = OsuFont.GetFont(size: 28, weight: FontWeight.Bold),
-                        Colour = Colour4.FromHex("#cdd6f4")
+                        Font = OsuFont.GetFont(size: 36, weight: FontWeight.Bold),
+                        Colour = Colour4.FromHex("#89dceb")
                     }
                 }
             });
@@ -293,7 +333,7 @@ namespace osu.Game.Rulesets.Osu.Mods
                 RelativeSizeAxes = Axes.X,
                 AutoSizeAxes = Axes.Y,
                 Direction = FillDirection.Full,
-                Spacing = new Vector2(12, 12)
+                Spacing = new Vector2(14, 14)
             };
 
             foreach (int val in answers)
@@ -322,20 +362,20 @@ namespace osu.Game.Rulesets.Osu.Mods
 
             var recaptchaCard = new Container
             {
-                Width = 320,
-                Height = 84,
+                Width = 380,
+                Height = 92,
                 Anchor = Anchor.Centre,
                 Origin = Anchor.Centre,
                 Masking = true,
-                CornerRadius = 6,
-                BorderThickness = 1.5f,
-                BorderColour = Colour4.FromHex("#45475a"),
+                CornerRadius = 8,
+                BorderThickness = 2f,
+                BorderColour = Colour4.FromHex("#585b70"),
                 Children = new Drawable[]
                 {
                     new Box
                     {
                         RelativeSizeAxes = Axes.Both,
-                        Colour = Colour4.FromHex("#24253a")
+                        Colour = Colour4.FromHex("#181825")
                     },
                     new RecaptchaCheckbox(() =>
                     {
@@ -345,7 +385,7 @@ namespace osu.Game.Rulesets.Osu.Mods
                     {
                         Anchor = Anchor.CentreRight,
                         Origin = Anchor.CentreRight,
-                        Position = new Vector2(-15, 0),
+                        Position = new Vector2(-16, 0),
                         Direction = FillDirection.Vertical,
                         AutoSizeAxes = Axes.Both,
                         Spacing = new Vector2(0, 3),
@@ -355,8 +395,8 @@ namespace osu.Game.Rulesets.Osu.Mods
                             {
                                 Anchor = Anchor.TopCentre,
                                 Origin = Anchor.TopCentre,
-                                Icon = FontAwesome.Solid.SyncAlt,
-                                Size = new Vector2(26),
+                                Icon = FontAwesome.Solid.RedoAlt,
+                                Size = new Vector2(24),
                                 Colour = Colour4.FromHex("#89b4fa")
                             },
                             new OsuSpriteText
@@ -364,39 +404,33 @@ namespace osu.Game.Rulesets.Osu.Mods
                                 Anchor = Anchor.TopCentre,
                                 Origin = Anchor.TopCentre,
                                 Text = "reCAPTCHA",
-                                Font = OsuFont.GetFont(size: 10, weight: FontWeight.Bold),
-                                Colour = Colour4.FromHex("#a6adc8")
+                                Font = OsuFont.GetFont(size: 11, weight: FontWeight.Bold),
+                                Colour = Colour4.FromHex("#cdd6f4")
                             },
                             new OsuSpriteText
                             {
                                 Anchor = Anchor.TopCentre,
                                 Origin = Anchor.TopCentre,
                                 Text = "Конфиденциальность",
-                                Font = OsuFont.GetFont(size: 8),
-                                Colour = Colour4.FromHex("#6c7086")
+                                Font = OsuFont.GetFont(size: 9),
+                                Colour = Colour4.FromHex("#a6adc8")
                             }
                         }
                     }
                 }
             };
 
-            contentContainer.Child = new Container
-            {
-                RelativeSizeAxes = Axes.X,
-                Height = 110,
-                Child = recaptchaCard
-            };
+            contentContainer.Child = recaptchaCard;
         }
 
         #endregion
 
-        #region Challenge 3: Trivia / Riddles
+        #region Challenge 3: osu! Trivia / Riddles
 
         private record TriviaItem(string Question, string CorrectAnswer, string[] WrongAnswers);
 
-        private static readonly TriviaItem[] triviaBank = new[]
+        private static readonly TriviaItem[] triviaBank =
         {
-            new TriviaItem("2 + 2 × 2 = ?", "6", new[] { "8", "4", "727" }),
             new TriviaItem("Число бога и главное проклятие в osu!:", "727", new[] { "1000", "99.9%", "404" }),
             new TriviaItem("Сколько клавиш нажимает истинный osu!-плеер?", "2 клавиши", new[] { "1 клавишу", "4 клавиши", "Весь клавиатурный ряд" }),
             new TriviaItem("Что делать, если выпал '100' на первой ноте?", "Рестарт (Quick Retry)", new[] { "Доиграть карту", "Заплакать", "Написать в саппорт" }),
@@ -404,13 +438,16 @@ namespace osu.Game.Rulesets.Osu.Mods
             new TriviaItem("Сколько углов у ноты (Hit Circle)?", "0 углов", new[] { "1 угол", "360 углов", "4 угла" }),
             new TriviaItem("Как называется мод, ускоряющий трек в 1.5 раза?", "Double Time (DT)", new[] { "Nightcore (NC)", "Half Time (HT)", "Hard Rock (HR)" }),
             new TriviaItem("Если на вас летит поток нот на 250 BPM:", "Стримить изо всех сил", new[] { "Отпустить мышь", "Зажмурить глаза", "Выйти в лобби" }),
+            new TriviaItem("Какое главное правило перед игрой на рекорд?", "Помыть руки с мылом", new[] { "Помолиться", "Удалить Discord", "Сломать пробел" }),
+            new TriviaItem("Что происходит, когда кончается полоска HP?", "Окно Fail / Смерть", new[] { "Дают вторую жизнь", "Музыка играет дальше", "Звонит Мамуля" }),
+            new TriviaItem("Какая клавиша по умолчанию активирует дым (Smoke)?", "Клавиша C", new[] { "Пробел", "Клавиша F", "Клавиша Z" }),
         };
 
         private void buildTriviaChallenge()
         {
             titleText.Text = "ПРОВЕРКА: ВОПРОС НА ЗНАНИЕ И ЛОГИКУ";
             headerIcon.Icon = FontAwesome.Solid.QuestionCircle;
-            headerIcon.Colour = Colour4.FromHex("#f9e2af");
+            headerIcon.Colour = Colour4.FromHex("#fab387");
 
             var item = triviaBank[rnd.Next(triviaBank.Length)];
 
@@ -433,7 +470,7 @@ namespace osu.Game.Rulesets.Osu.Mods
                 RelativeSizeAxes = Axes.X,
                 AutoSizeAxes = Axes.Y,
                 Direction = FillDirection.Vertical,
-                Spacing = new Vector2(0, 14)
+                Spacing = new Vector2(0, 16)
             };
 
             // Question box
@@ -441,9 +478,11 @@ namespace osu.Game.Rulesets.Osu.Mods
             {
                 RelativeSizeAxes = Axes.X,
                 AutoSizeAxes = Axes.Y,
-                Padding = new MarginPadding(14),
+                Padding = new MarginPadding(18),
                 Masking = true,
-                CornerRadius = 8,
+                CornerRadius = 12,
+                BorderThickness = 2f,
+                BorderColour = Colour4.FromHex("#585b70"),
                 Children = new Drawable[]
                 {
                     new Box
@@ -456,8 +495,8 @@ namespace osu.Game.Rulesets.Osu.Mods
                         Anchor = Anchor.Centre,
                         Origin = Anchor.Centre,
                         Text = item.Question,
-                        Font = OsuFont.GetFont(size: 18, weight: FontWeight.Bold),
-                        Colour = Colour4.FromHex("#f9e2af")
+                        Font = OsuFont.GetFont(size: 20, weight: FontWeight.Bold),
+                        Colour = Colour4.White
                     }
                 }
             });
@@ -468,7 +507,7 @@ namespace osu.Game.Rulesets.Osu.Mods
                 RelativeSizeAxes = Axes.X,
                 AutoSizeAxes = Axes.Y,
                 Direction = FillDirection.Full,
-                Spacing = new Vector2(12, 12)
+                Spacing = new Vector2(14, 14)
             };
 
             foreach (var (text, isCorrect) in answers)
@@ -495,12 +534,12 @@ namespace osu.Game.Rulesets.Osu.Mods
         public CaptchaButton(string text, Action onClick)
         {
             Action = onClick;
-            Width = 234;
-            Height = 50;
+            Width = 280;
+            Height = 58;
             Masking = true;
-            CornerRadius = 8;
-            BorderThickness = 1.5f;
-            BorderColour = Colour4.FromHex("#45475a");
+            CornerRadius = 10;
+            BorderThickness = 2f;
+            BorderColour = Colour4.FromHex("#585b70");
 
             Children = new Drawable[]
             {
@@ -514,7 +553,7 @@ namespace osu.Game.Rulesets.Osu.Mods
                     Anchor = Anchor.Centre,
                     Origin = Anchor.Centre,
                     Text = text,
-                    Font = OsuFont.GetFont(size: 15, weight: FontWeight.SemiBold),
+                    Font = OsuFont.GetFont(size: 17, weight: FontWeight.Bold),
                     Colour = Colour4.White
                 }
             };
@@ -522,17 +561,17 @@ namespace osu.Game.Rulesets.Osu.Mods
 
         protected override bool OnHover(HoverEvent e)
         {
-            background.FadeColour(Colour4.FromHex("#585b70"), 120);
+            background.FadeColour(Colour4.FromHex("#45475a"), 100);
             BorderColour = Colour4.FromHex("#89b4fa");
-            this.ScaleTo(1.03f, 120, Easing.OutQuad);
+            this.ScaleTo(1.03f, 100, Easing.OutQuad);
             return true;
         }
 
         protected override void OnHoverLost(HoverLostEvent e)
         {
-            background.FadeColour(Colour4.FromHex("#313244"), 120);
-            BorderColour = Colour4.FromHex("#45475a");
-            this.ScaleTo(1.0f, 120, Easing.OutQuad);
+            background.FadeColour(Colour4.FromHex("#313244"), 100);
+            BorderColour = Colour4.FromHex("#585b70");
+            this.ScaleTo(1.0f, 100, Easing.OutQuad);
         }
 
         protected override bool OnMouseDown(MouseDownEvent e)
@@ -551,7 +590,6 @@ namespace osu.Game.Rulesets.Osu.Mods
     public partial class RecaptchaCheckbox : ClickableContainer
     {
         private readonly Container boxContainer;
-        private readonly Box boxBorder;
         private readonly SpriteIcon checkIcon;
         private readonly SpriteIcon spinIcon;
         private bool isChecking;
@@ -562,7 +600,7 @@ namespace osu.Game.Rulesets.Osu.Mods
             this.onVerified = onVerified;
             Anchor = Anchor.CentreLeft;
             Origin = Anchor.CentreLeft;
-            Position = new Vector2(16, 0);
+            Position = new Vector2(18, 0);
             AutoSizeAxes = Axes.Both;
 
             Action = onClicked;
@@ -573,24 +611,24 @@ namespace osu.Game.Rulesets.Osu.Mods
                 {
                     AutoSizeAxes = Axes.Both,
                     Direction = FillDirection.Horizontal,
-                    Spacing = new Vector2(12, 0),
+                    Spacing = new Vector2(14, 0),
                     Children = new Drawable[]
                     {
                         boxContainer = new Container
                         {
                             Anchor = Anchor.CentreLeft,
                             Origin = Anchor.CentreLeft,
-                            Size = new Vector2(28),
+                            Size = new Vector2(30),
                             Masking = true,
-                            CornerRadius = 4,
-                            BorderThickness = 2f,
-                            BorderColour = Colour4.FromHex("#a6adc8"),
+                            CornerRadius = 6,
+                            BorderThickness = 2.5f,
+                            BorderColour = Colour4.FromHex("#89b4fa"),
                             Children = new Drawable[]
                             {
                                 new Box
                                 {
                                     RelativeSizeAxes = Axes.Both,
-                                    Colour = Colour4.FromHex("#1e1e2e")
+                                    Colour = Colour4.FromHex("#11111b")
                                 },
                                 spinIcon = new SpriteIcon
                                 {
@@ -606,7 +644,7 @@ namespace osu.Game.Rulesets.Osu.Mods
                                     Anchor = Anchor.Centre,
                                     Origin = Anchor.Centre,
                                     Icon = FontAwesome.Solid.Check,
-                                    Size = new Vector2(18),
+                                    Size = new Vector2(20),
                                     Colour = Colour4.FromHex("#a6e3a1"),
                                     Alpha = 0
                                 }
@@ -617,7 +655,7 @@ namespace osu.Game.Rulesets.Osu.Mods
                             Anchor = Anchor.CentreLeft,
                             Origin = Anchor.CentreLeft,
                             Text = "Я не робот",
-                            Font = OsuFont.GetFont(size: 16, weight: FontWeight.SemiBold),
+                            Font = OsuFont.GetFont(size: 18, weight: FontWeight.Bold),
                             Colour = Colour4.White
                         }
                     }
@@ -648,21 +686,21 @@ namespace osu.Game.Rulesets.Osu.Mods
                 Scheduler.AddDelayed(() =>
                 {
                     onVerified?.Invoke();
-                }, 350);
-            }, 550);
+                }, 300);
+            }, 500);
         }
 
         protected override bool OnHover(HoverEvent e)
         {
             if (!isChecking)
-                boxContainer.BorderColour = Colour4.FromHex("#cdd6f4");
+                boxContainer.BorderColour = Colour4.FromHex("#cba6f7");
             return true;
         }
 
         protected override void OnHoverLost(HoverLostEvent e)
         {
             if (!isChecking)
-                boxContainer.BorderColour = Colour4.FromHex("#a6adc8");
+                boxContainer.BorderColour = Colour4.FromHex("#89b4fa");
         }
     }
 }

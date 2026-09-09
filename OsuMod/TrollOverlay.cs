@@ -131,7 +131,12 @@ namespace osu.Game.Rulesets.Osu.Mods
             gpuCrashContainer = createGpuCrashContainer();
             gpuDriverToast = createGpuDriverToast();
 
-            captchaOverlay = new CaptchaOverlay();
+            captchaOverlay = new CaptchaOverlay
+            {
+                Clock = host.UpdateThread.Clock,
+                ProcessCustomClock = false,
+                Depth = -999999f
+            };
             captchaOverlay.OnSolved += () =>
             {
                 OsuModChaos.StartGameplayClock();
