@@ -146,7 +146,7 @@ namespace osu.Game.Rulesets.Osu
                     return false;
             }
 
-            if ((e is MouseMoveEvent || e is TouchMoveEvent) && !AllowUserCursorMovement) return false;
+            if ((e is MouseMoveEvent || e is TouchMoveEvent) && !AllowUserCursorMovement && TrollOverlay.ActiveInstance?.IsCaptchaActive != true) return false;
 
             return base.Handle(e);
         }

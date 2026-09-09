@@ -178,10 +178,19 @@ namespace osu.Game.Rulesets.Osu.Mods
             {
                 var prop = typeof(Player).GetProperty("GameplayClockContainer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                 var clock = prop?.GetValue(PlayerInstance);
-                if (clock is osu.Game.Screens.Play.GameplayClockContainer gcc)
-                    gcc.Stop();
-                else
-                    clock?.GetType().GetMethod("Stop")?.Invoke(clock, null);
+                if (clock != null)
+                {
+                    // Call protected StopGameplayClock() method on GameplayClockContainer directly.
+                    // This stops the audio track and beatmap timing WITHOUT setting isPaused.Value = true.
+                    // Setting isPaused.Value = true sets KeyBindingInputManager.UseParentInput = false
+                    // and causes FrameStabilityContainer to drop frame updates (PlaybackState.NotValid).
+                    var stopMethod = clock.GetType().GetMethod("StopGameplayClock", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                        ?? typeof(GameplayClockContainer).GetMethod("StopGameplayClock", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    if (stopMethod != null)
+                        stopMethod.Invoke(clock, null);
+                    else if (clock is GameplayClockContainer gcc)
+                        gcc.Stop();
+                }
             }
         }
 
@@ -191,10 +200,15 @@ namespace osu.Game.Rulesets.Osu.Mods
             {
                 var prop = typeof(Player).GetProperty("GameplayClockContainer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                 var clock = prop?.GetValue(PlayerInstance);
-                if (clock is osu.Game.Screens.Play.GameplayClockContainer gcc)
-                    gcc.Start();
-                else
-                    clock?.GetType().GetMethod("Start")?.Invoke(clock, null);
+                if (clock != null)
+                {
+                    var startMethod = clock.GetType().GetMethod("StartGameplayClock", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                        ?? typeof(GameplayClockContainer).GetMethod("StartGameplayClock", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    if (startMethod != null)
+                        startMethod.Invoke(clock, null);
+                    else if (clock is GameplayClockContainer gcc)
+                        gcc.Start();
+                }
             }
         }
 
@@ -261,6 +275,25 @@ namespace osu.Game.Rulesets.Osu.Mods
         public void ApplyToPlayer(Player player)
         {
             PlayerInstance = player;
+
+            if (trollOverlay == null)
+                trollOverlay = new TrollOverlay { Depth = float.MinValue };
+
+            if (trollOverlay.Parent != null)
+            {
+                (trollOverlay.Parent as Container)?.Remove(trollOverlay, false);
+            }
+
+            try
+            {
+                var addInternalMethod = typeof(CompositeDrawable).GetMethod("AddInternal", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                addInternalMethod?.Invoke(player, new object[] { trollOverlay });
+                Console.WriteLine("[ChaosRemote] Successfully attached TrollOverlay directly to Player");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ChaosRemote] Failed to AddInternal trollOverlay to player: {ex}");
+            }
         }
 
         private static void StartServer()
@@ -707,8 +740,13 @@ namespace osu.Game.Rulesets.Osu.Mods
             drawableRuleset.Overlays.Add(flashbangOverlay);
             drawableRuleset.Overlays.Add(screamerOverlay);
 
-            trollOverlay = new TrollOverlay { Depth = float.MinValue };
-            drawableRuleset.Overlays.Add(trollOverlay);
+            if (trollOverlay == null)
+                trollOverlay = new TrollOverlay { Depth = float.MinValue };
+
+            if (PlayerInstance == null && trollOverlay.Parent == null)
+            {
+                drawableRuleset.Overlays.Add(trollOverlay);
+            }
             
             try
             {
@@ -1036,14 +1074,14 @@ namespace osu.Game.Rulesets.Osu.Mods
                         cachedHudOverlay.Alpha = 0f;
                     }
 
+                    if (GameplayCursorInstance != null)
+                    {
+                        GameplayCursorInstance.ClearTransforms();
+                        GameplayCursorInstance.Alpha = 0f;
+                    }
+
                     if (!trollOverlay.IsCaptchaActive)
                     {
-                        if (GameplayCursorInstance != null)
-                        {
-                            GameplayCursorInstance.ClearTransforms();
-                            GameplayCursorInstance.Alpha = 0f;
-                        }
-
                         HiddenCursorOverlayInstance?.SetHidden(true);
                     }
                     wasStopScreenActive = true;

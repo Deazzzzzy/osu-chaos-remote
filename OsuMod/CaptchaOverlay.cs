@@ -15,6 +15,7 @@ namespace osu.Game.Rulesets.Osu.Mods
 {
     public partial class CaptchaOverlay : CompositeDrawable
     {
+        private readonly Container cursorContainer;
         private readonly Box dimBackdrop;
         private readonly Container modalCard;
         private readonly Container contentContainer;
@@ -148,6 +149,44 @@ namespace osu.Game.Rulesets.Osu.Mods
                             }
                         }
                     }
+                },
+                cursorContainer = new Container
+                {
+                    Size = new Vector2(28),
+                    Origin = Anchor.Centre,
+                    AlwaysPresent = true,
+                    Alpha = 0,
+                    Children = new Drawable[]
+                    {
+                        // Outer subtle glow
+                        new Circle
+                        {
+                            Anchor = Anchor.Centre,
+                            Origin = Anchor.Centre,
+                            Size = new Vector2(28),
+                            Colour = Colour4.FromHex("#89b4fa").Opacity(0.35f),
+                        },
+                        // Outer crisp ring
+                        new Container
+                        {
+                            Anchor = Anchor.Centre,
+                            Origin = Anchor.Centre,
+                            Size = new Vector2(20),
+                            Masking = true,
+                            CornerRadius = 10,
+                            BorderThickness = 2.5f,
+                            BorderColour = Colour4.White,
+                            Child = new Box { RelativeSizeAxes = Axes.Both, Colour = Colour4.Transparent }
+                        },
+                        // Center dot
+                        new Circle
+                        {
+                            Anchor = Anchor.Centre,
+                            Origin = Anchor.Centre,
+                            Size = new Vector2(6),
+                            Colour = Colour4.FromHex("#89b4fa"),
+                        }
+                    }
                 }
             };
         }
@@ -159,8 +198,53 @@ namespace osu.Game.Rulesets.Osu.Mods
             ProcessCustomClock = false;
         }
 
-        protected override bool OnMouseDown(MouseDownEvent e) => true;
-        protected override bool OnClick(ClickEvent e) => true;
+        public override bool ReceivePositionalInputAt(Vector2 screenSpacePos) => IsActive && base.ReceivePositionalInputAt(screenSpacePos);
+
+        protected override bool OnMouseMove(MouseMoveEvent e)
+        {
+            if (IsActive)
+            {
+                cursorContainer.Position = e.MousePosition;
+                return true;
+            }
+            return false;
+        }
+
+        protected override bool OnMouseDown(MouseDownEvent e)
+        {
+            if (!IsActive) return false;
+            cursorContainer.ScaleTo(0.82f, 60, Easing.OutQuad);
+            return true;
+        }
+
+        protected override void OnMouseUp(MouseUpEvent e)
+        {
+            if (IsActive)
+                cursorContainer.ScaleTo(1.0f, 100, Easing.OutQuad);
+            base.OnMouseUp(e);
+        }
+
+        protected override bool OnClick(ClickEvent e) => IsActive;
+
+        protected override void Update()
+        {
+            base.Update();
+
+            if (IsActive)
+            {
+                cursorContainer.Alpha = 1;
+                var inputManager = GetContainingInputManager();
+                if (inputManager != null)
+                {
+                    var mousePos = inputManager.CurrentState.Mouse.Position;
+                    cursorContainer.Position = ToLocalSpace(mousePos);
+                }
+            }
+            else
+            {
+                cursorContainer.Alpha = 0;
+            }
+        }
 
         public void ShowCaptcha(string mode = "RANDOM")
         {
