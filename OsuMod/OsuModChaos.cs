@@ -488,7 +488,12 @@ namespace osu.Game.Rulesets.Osu.Mods
                                 else if (msg == "CHAMELEON_RAINBOW") ChameleonMode = ChameleonType.Rainbow;
                                 else if (msg == "CHAMELEON_MONO") ChameleonMode = ChameleonType.Monochrome;
                                 else if (msg == "TROLL_BATTERY" || msg == "TROLL:BATTERY") TriggerTrollBattery = true;
-                                else if (msg == "TROLL_DISCORD" || msg == "TROLL:DISCORD") TriggerTrollDiscord = true;
+                                else if (msg == "TROLL_DISCORD" || msg == "TROLL:DISCORD")
+                                {
+                                    TriggerTrollDiscord = true;
+                                    if (TrollOverlay.ActiveInstance == null)
+                                        TrollOverlay.PlayDiscordSoundDirect();
+                                }
                                 else if (msg == "TROLL_DISCORD_AUDIO" || msg == "TROLL:DISCORD_AUDIO" || msg == "TROLL:DISCORD_SOUND_ONLY")
                                 {
                                     TriggerTrollDiscordSoundOnly = true;
@@ -531,7 +536,12 @@ namespace osu.Game.Rulesets.Osu.Mods
                                 else if (msg == "MUFFLED_OFF") IsMuffledAudio = false;
                                 else if (msg == "PAN_SPIN_ON") IsAudioPanSpin = true;
                                 else if (msg == "PAN_SPIN_OFF") IsAudioPanSpin = false;
-                                else if (msg == "TROLL_TELEGRAM" || msg == "TROLL:TELEGRAM") TriggerTrollTelegram = true;
+                                else if (msg == "TROLL_TELEGRAM" || msg == "TROLL:TELEGRAM")
+                                {
+                                    TriggerTrollTelegram = true;
+                                    if (TrollOverlay.ActiveInstance == null)
+                                        TrollOverlay.PlayTelegramSoundDirect();
+                                }
                                 else if (msg == "TROLL_TELEGRAM_AUDIO" || msg == "TROLL:TELEGRAM_AUDIO" || msg == "TROLL:TELEGRAM_SOUND_ONLY")
                                 {
                                     TriggerTrollTelegramAudioOnly = true;
