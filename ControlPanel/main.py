@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 import socket
 import threading
+import time
 
 class ModernControlPanel:
     def __init__(self, root):
@@ -33,6 +34,12 @@ class ModernControlPanel:
         self.cs_min_val = 0.40
         self.cs_max_val = 1.70
 
+        # Настройки задержки вызова ивентов (для переключения окон)
+        self.event_delay_enabled = tk.BooleanVar(value=True)
+        self.event_delay_seconds = tk.DoubleVar(value=3.0)
+        self.delay_scope = tk.StringVar(value="events")
+        self._countdown_job = None
+
         style = ttk.Style()
         style.theme_use("clam")
         style.configure("TScale", background=self.panel_color, troughcolor=self.bg_color)
@@ -44,9 +51,25 @@ class ModernControlPanel:
         style.configure("TFrame", background=self.bg_color)
         self._vol_timer = None
         
-        # Заголовок
-        header = tk.Label(root, text="OSU! DEBUFF CONTROL", font=("Segoe UI Black", 16), bg=self.bg_color, fg=self.accent_blue)
-        header.pack(pady=(12, 4))
+        # Верхняя панель: Заголовок + Бейдж задержки + Шестеренка настроек
+        top_header_frame = tk.Frame(root, bg=self.bg_color)
+        top_header_frame.pack(fill=tk.X, padx=20, pady=(12, 4))
+
+        left_spacer = tk.Frame(top_header_frame, bg=self.bg_color, width=80)
+        left_spacer.pack(side=tk.LEFT)
+
+        header = tk.Label(top_header_frame, text="OSU! DEBUFF CONTROL", font=("Segoe UI Black", 16), bg=self.bg_color, fg=self.accent_blue)
+        header.pack(side=tk.LEFT, expand=True)
+
+        settings_bar = tk.Frame(top_header_frame, bg=self.bg_color)
+        settings_bar.pack(side=tk.RIGHT)
+
+        self.delay_badge = tk.Label(settings_bar, text="⏱️ 3с", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.accent_yellow, padx=6, pady=2, cursor="hand2")
+        self.delay_badge.pack(side=tk.LEFT, padx=(0, 6))
+        self.delay_badge.bind("<Button-1>", lambda e: self.open_settings())
+
+        self.settings_btn = tk.Button(settings_bar, text="⚙️", font=("Segoe UI", 13), bg=self.panel_color, fg="#cdd6f4", activebackground=self.accent_blue, activeforeground="#11111b", bd=0, relief=tk.FLAT, cursor="hand2", padx=6, pady=0, command=self.open_settings)
+        self.settings_btn.pack(side=tk.LEFT)
         
         # Блок подключения
         conn_frame = tk.Frame(root, bg=self.panel_color, padx=15, pady=5)
@@ -882,6 +905,13 @@ class ModernControlPanel:
 
         tk.Button(hal_frame, text="СЛУЧАЙНАЯ НОТА", font=("Segoe UI", 10, "bold"), bg=self.accent_blue, fg="#11111b", bd=0, command=self.spawn_random_note).pack(fill=tk.X, pady=10)
 
+        # Баннер обратного отсчёта (показывается при активной задержке перед вызовом ивента)
+        self.countdown_banner = tk.Frame(root, bg=self.panel_color, highlightthickness=1, highlightbackground=self.accent_yellow, padx=12, pady=6)
+        self.countdown_lbl = tk.Label(self.countdown_banner, text="", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.accent_yellow)
+        self.countdown_lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.countdown_cancel_btn = tk.Button(self.countdown_banner, text="✕ Отмена", font=("Segoe UI", 9, "bold"), bg=self.accent_red, fg="#11111b", bd=0, padx=8, pady=2, cursor="hand2", command=self.cancel_countdown)
+        self.countdown_cancel_btn.pack(side=tk.RIGHT)
+
         # Статус бар
         self.status_label = tk.Label(root, text="💡 Для ивентов и дебаффов выберите мод 'Chaos Remote' (CHR) в меню модов (F1)", font=("Segoe UI", 9, "bold"), bg=self.bg_color, fg=self.accent_yellow)
         self.status_label.pack(side=tk.BOTTOM, pady=5)
@@ -1157,7 +1187,30 @@ class ModernControlPanel:
         elif command == "REVERB_OFF":
             self.lbl_reverb.config(text="Эхо в соборе (Reverb):", fg=self.text_color)
 
-    def send_command(self, command: str):
+    def is_delayable_event(self, command: str) -> bool:
+        cmd_upper = command.upper()
+        if any(cmd_upper.startswith(prefix) for prefix in [
+            "TROLL:", "TROLL_", "CAPTCHA", "SCREAMER", "MOSQUITO", "WATERMARK"
+        ]):
+            return True
+        if cmd_upper in [
+            "DEVICE_DISCONNECT", "MOUSE_DISCONNECT", "MOUSE_SPINOUT",
+            "FLASHBANG", "KISS", "FAKE_MISS", "BARREL_ROLL", "TAPE_STOP",
+            "FLY_ON", "FLY_OFF", "CS_CHAOS_ON", "CS_CHAOS_OFF",
+            "INVERT_COLORS_ON", "INVERT_COLORS_OFF", "MOSAIC_ON", "MOSAIC_OFF",
+            "BUSY_CURSOR_ON", "BUSY_CURSOR_OFF", "BLACK_HOLE_ON", "BLACK_HOLE_OFF"
+        ]:
+            return True
+        return False
+
+    def is_continuous_or_slider_cmd(self, command: str) -> bool:
+        return command.startswith((
+            "JITTER:", "CURSOR_SCALE:", "AUDIO_DESYNC:", "SET_FPS:", "SPAWN_NOTE:",
+            "INPUT_LAG:", "CS_CHAOS_MIN:", "CS_CHAOS_MAX:", "CS_CHAOS_RANGE:",
+            "BLACK_HOLE_STRENGTH:"
+        ))
+
+    def _execute_send(self, command: str):
         ip = self.ip_entry.get().strip()
         def task():
             try:
@@ -1168,9 +1221,212 @@ class ModernControlPanel:
                 s.close()
                 self.root.after(0, lambda: self.status_label.config(text=f"Успех: Отправлено '{command}'", fg=self.accent_off))
                 self.root.after(0, lambda: self.update_ui_state(command))
-            except Exception as e:
-                self.root.after(0, lambda: self.status_label.config(text=f"Ошибка сети", fg=self.accent_on))
+            except Exception:
+                self.root.after(0, lambda: self.status_label.config(text=f"Ошибка сети: проверьте запуск osu! и IP", fg=self.accent_on))
         threading.Thread(target=task, daemon=True).start()
+
+    def cancel_countdown(self):
+        if self._countdown_job is not None:
+            self.root.after_cancel(self._countdown_job)
+            self._countdown_job = None
+        if hasattr(self, 'countdown_banner') and self.countdown_banner.winfo_ismapped():
+            self.countdown_banner.pack_forget()
+        self.status_label.config(text="Запуск ивента отменен", fg=self.text_color)
+
+    def send_command(self, command: str, force_instant: bool = False):
+        if force_instant or not self.event_delay_enabled.get() or self.is_continuous_or_slider_cmd(command):
+            self._execute_send(command)
+            return
+
+        should_delay = True
+        if self.delay_scope.get() == "events":
+            should_delay = self.is_delayable_event(command)
+
+        if not should_delay:
+            self._execute_send(command)
+            return
+
+        # Cancel previous active countdown if any
+        if self._countdown_job is not None:
+            self.root.after_cancel(self._countdown_job)
+            self._countdown_job = None
+
+        delay = float(self.event_delay_seconds.get())
+        end_time = time.time() + delay
+        self._show_countdown(command, end_time)
+
+    def _show_countdown(self, command: str, end_time: float):
+        remaining = max(0.0, end_time - time.time())
+        if remaining <= 0.05:
+            if hasattr(self, 'countdown_banner') and self.countdown_banner.winfo_ismapped():
+                self.countdown_banner.pack_forget()
+            self._countdown_job = None
+            self._execute_send(command)
+            return
+
+        display_cmd = command
+        if len(display_cmd) > 28:
+            display_cmd = display_cmd[:25] + "..."
+
+        self.countdown_lbl.config(text=f"⏳ [{remaining:.1f}с] Переключитесь в osu! Запуск '{display_cmd}'")
+        if not self.countdown_banner.winfo_ismapped():
+            self.countdown_banner.pack(side=tk.BOTTOM, fill=tk.X, padx=20, pady=(0, 4), before=self.status_label)
+
+        self.status_label.config(text=f"⏳ Переключитесь в окно osu! (до старта {remaining:.1f} сек)", fg=self.accent_yellow)
+        self._countdown_job = self.root.after(100, lambda: self._show_countdown(command, end_time))
+
+    def _update_delay_badge(self):
+        if hasattr(self, 'delay_badge'):
+            if self.event_delay_enabled.get():
+                sec = self.event_delay_seconds.get()
+                sec_str = f"{int(sec)}с" if sec.is_integer() else f"{sec:.1f}с"
+                self.delay_badge.config(text=f"⏱️ {sec_str}", fg=self.accent_yellow)
+            else:
+                self.delay_badge.config(text="⏱️ ВЫКЛ", fg="#a6adc8")
+
+    def _on_delay_scale_move(self, val):
+        sec = round(float(val) * 2) / 2
+        self.event_delay_seconds.set(sec)
+        if hasattr(self, 'delay_lbl_var'):
+            self.delay_lbl_var.set(f"Задержка: {sec:.1f} сек")
+        self._update_delay_badge()
+
+    def _set_delay_preset(self, sec):
+        self.event_delay_seconds.set(sec)
+        if hasattr(self, 'delay_scale'):
+            self.delay_scale.set(sec)
+        if hasattr(self, 'delay_lbl_var'):
+            self.delay_lbl_var.set(f"Задержка: {sec:.1f} сек")
+        self._update_delay_badge()
+
+    def _on_delay_settings_changed(self):
+        self._update_delay_badge()
+
+    def open_settings(self):
+        if hasattr(self, 'settings_win') and self.settings_win and self.settings_win.winfo_exists():
+            self.settings_win.lift()
+            self.settings_win.focus_force()
+            return
+
+        self.settings_win = tk.Toplevel(self.root)
+        self.settings_win.title("Настройки osu! Chaos Remote")
+        self.settings_win.geometry("460x520")
+        self.settings_win.configure(bg=self.bg_color)
+        self.settings_win.resizable(False, False)
+        self.settings_win.attributes("-topmost", True)
+        self.settings_win.transient(self.root)
+
+        try:
+            x = self.root.winfo_x() + 40
+            y = self.root.winfo_y() + 60
+            self.settings_win.geometry(f"+{x}+{y}")
+        except Exception:
+            pass
+
+        tk.Label(self.settings_win, text="⚙️ НАСТРОЙКИ ПАНЕЛИ", font=("Segoe UI", 14, "bold"), bg=self.bg_color, fg=self.accent_blue).pack(pady=(16, 10))
+
+        # Карточка 1: Задержка вызова ивентов (Альт-Таб)
+        card1 = tk.Frame(self.settings_win, bg=self.panel_color, padx=16, pady=14)
+        card1.pack(fill=tk.X, padx=16, pady=6)
+
+        tk.Label(card1, text="⏱️ ЗАДЕРЖКА ВЫЗОВА ИВЕНТОВ (АЛЬТ-ТАБ ТАЙМЕР)", font=("Segoe UI", 10, "bold"), bg=self.panel_color, fg=self.accent_yellow).pack(anchor=tk.W, pady=(0, 6))
+        tk.Label(card1, text="Даёт время переключиться на окно osu!, чтобы игра не вставала на паузу из-за потери фокуса Windows.", font=("Segoe UI", 8), bg=self.panel_color, fg="#a6adc8", wraplength=400, justify=tk.LEFT).pack(anchor=tk.W, pady=(0, 10))
+
+        chk = tk.Checkbutton(
+            card1,
+            text="Включить обратный отсчёт перед запуском ивентов",
+            variable=self.event_delay_enabled,
+            font=("Segoe UI", 9, "bold"),
+            bg=self.panel_color,
+            fg=self.text_color,
+            selectcolor=self.bg_color,
+            activebackground=self.panel_color,
+            activeforeground=self.text_color,
+            command=self._on_delay_settings_changed
+        )
+        chk.pack(anchor=tk.W, pady=(0, 8))
+
+        slider_frame = tk.Frame(card1, bg=self.panel_color)
+        slider_frame.pack(fill=tk.X, pady=(0, 6))
+
+        self.delay_lbl_var = tk.StringVar(value=f"Задержка: {self.event_delay_seconds.get():.1f} сек")
+        tk.Label(slider_frame, textvariable=self.delay_lbl_var, font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.accent_yellow).pack(anchor=tk.W)
+
+        self.delay_scale = ttk.Scale(
+            card1,
+            from_=1.0,
+            to=10.0,
+            value=self.event_delay_seconds.get(),
+            command=self._on_delay_scale_move
+        )
+        self.delay_scale.pack(fill=tk.X, pady=(0, 8))
+
+        presets_frame = tk.Frame(card1, bg=self.panel_color)
+        presets_frame.pack(fill=tk.X, pady=(0, 12))
+        tk.Label(presets_frame, text="Пресеты:", font=("Segoe UI", 8), bg=self.panel_color, fg="#a6adc8").pack(side=tk.LEFT, padx=(0, 8))
+
+        for sec in [1.0, 2.0, 3.0, 5.0]:
+            btn_text = f"{int(sec)} сек ⭐" if sec == 3.0 else f"{int(sec)} сек"
+            tk.Button(
+                presets_frame,
+                text=btn_text,
+                font=("Segoe UI", 8, "bold"),
+                bg="#45475a" if sec != 3.0 else self.accent_blue,
+                fg="#11111b" if sec == 3.0 else "#cdd6f4",
+                bd=0,
+                padx=6,
+                pady=2,
+                cursor="hand2",
+                command=lambda s=sec: self._set_delay_preset(s)
+            ).pack(side=tk.LEFT, padx=3)
+
+        tk.Label(card1, text="Применять задержку к:", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color).pack(anchor=tk.W, pady=(4, 4))
+
+        tk.Radiobutton(
+            card1,
+            text="Только к ивентам и пранкам (Каптча, BSOD, Срыв мыши...)",
+            variable=self.delay_scope,
+            value="events",
+            font=("Segoe UI", 8),
+            bg=self.panel_color,
+            fg=self.text_color,
+            selectcolor=self.bg_color,
+            activebackground=self.panel_color,
+            activeforeground=self.text_color,
+            command=self._on_delay_settings_changed
+        ).pack(anchor=tk.W)
+
+        tk.Radiobutton(
+            card1,
+            text="Ко всем кнопкам команд",
+            variable=self.delay_scope,
+            value="all",
+            font=("Segoe UI", 8),
+            bg=self.panel_color,
+            fg=self.text_color,
+            selectcolor=self.bg_color,
+            activebackground=self.panel_color,
+            activeforeground=self.text_color,
+            command=self._on_delay_settings_changed
+        ).pack(anchor=tk.W)
+
+        card2 = tk.Frame(self.settings_win, bg=self.panel_color, padx=16, pady=10)
+        card2.pack(fill=tk.X, padx=16, pady=6)
+        tk.Label(card2, text="💡 Совет по использованию:", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.accent_off).pack(anchor=tk.W, pady=(0, 2))
+        tk.Label(card2, text="При нажатии кнопки ивента внизу появится таймер обратного отсчёта. Кликните по окну osu! за 3 секунды, и ивент сработает прямо во время активной игры!", font=("Segoe UI", 8), bg=self.panel_color, fg="#cdd6f4", wraplength=400, justify=tk.LEFT).pack(anchor=tk.W)
+
+        tk.Button(
+            self.settings_win,
+            text="СОХРАНИТЬ И ЗАКРЫТЬ",
+            font=("Segoe UI", 10, "bold"),
+            bg=self.accent_off,
+            fg="#11111b",
+            bd=0,
+            padx=16,
+            pady=8,
+            cursor="hand2",
+            command=self.settings_win.destroy
+        ).pack(pady=(12, 16))
 
     def set_fps_target(self, fps):
         if fps <= 0:
