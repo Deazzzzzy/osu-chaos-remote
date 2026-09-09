@@ -3,34 +3,88 @@ from tkinter import ttk
 import socket
 import threading
 import time
+import ctypes
 
 class ModernControlPanel:
     def __init__(self, root):
         self.root = root
-        self.root.title("osu! Chaos Remote")
-        self.root.geometry("540x920")
-        self.root.configure(bg="#1e1e2e")
+        self.root.title("osu! Chaos Remote • Control Panel")
+        self.root.geometry("560x900")
+        self.root.minsize(500, 700)
+        self.root.configure(bg="#181825")  # Catppuccin Mantle
         self.root.attributes("-topmost", True)
-        self.root.resizable(False, True)
-        
-        # --- Цветовая палитра ---
-        self.bg_color = "#1e1e2e"
-        self.panel_color = "#313244"
-        self.text_color = "#cdd6f4"
-        self.accent_on = "#f38ba8"
-        self.accent_off = "#a6e3a1"
-        self.accent_red = "#f38ba8"
-        self.accent_blue = "#89b4fa"
-        self.accent_yellow = "#f9e2af"
-        self.accent_earth = "#fab387"
-        self.accent_blackout = "#cba6f7"
-        self.accent_cyan = "#89dceb"
-        self.accent_purple = "#b4befe"
-        
-        self.inv_x = False
-        self.inv_y = False
-        self.jam_k1 = False
-        self.jam_k2 = False
+        self.root.resizable(True, True)
+
+        # High DPI awareness for Windows
+        try:
+            ctypes.windll.shcore.SetProcessDpiAwareness(1)
+        except Exception:
+            try:
+                ctypes.windll.user32.SetProcessDPIAware()
+            except Exception:
+                pass
+
+        # --- Цветовая палитра (Catppuccin Mocha + Glow Accents) ---
+        self.bg_color = "#181825"         # Mantle
+        self.card_color = "#1e1e2e"       # Base
+        self.panel_color = "#24273a"      # Surface 0
+        self.surface1 = "#313244"         # Surface 1
+        self.surface2 = "#45475a"         # Surface 2
+        self.text_color = "#cdd6f4"       # Text
+        self.text_dim = "#a6adc8"         # Subtext
+        self.border_color = "#363a4f"     # Subtle border
+
+        self.accent_green = "#a6e3a1"     # Success / Active (Green)
+        self.accent_red = "#f38ba8"       # Danger / Off / Panic (Red)
+        self.accent_blue = "#89b4fa"      # Primary Blue
+        self.accent_yellow = "#f9e2af"    # Warning / Yellow
+        self.accent_peach = "#fab387"     # Orange / Peach
+        self.accent_mauve = "#cba6f7"     # Special / Purple
+        self.accent_cyan = "#89dceb"      # Cyan
+        self.accent_pink = "#f5c2e7"      # Pink
+        self.accent_dark = "#11111b"      # Crust
+
+        # Состояния тумблеров (True = Активен, False = Выключен)
+        self.toggle_states = {
+            "CHAOS": False,
+            "WIND": False,
+            "MAGNET": False,
+            "BLACK_HOLE": False,
+            "GRAVITY": False,
+            "REPULSION": False,
+            "CLONES": False,
+            "HIDE_CURSOR": False,
+            "BUSY_CURSOR": False,
+            "INVERT_X": False,
+            "INVERT_Y": False,
+            "JAM_K1": False,
+            "JAM_K2": False,
+            "DRUNK": False,
+            "CAROUSEL": False,
+            "CS_CHAOS": False,
+            "MOSAIC": False,
+            "INVERT_COLORS": False,
+            "TUNNEL": False,
+            "GHOST_SLIDERS": False,
+            "MUFFLED": False,
+            "PAN_SPIN": False,
+            "REVERB": False,
+            "BASS_BOOST": False,
+            "EARTHQUAKE": False,
+            "HIDDEN": False,
+            "FREEZE": False,
+            "WATERMARK": False,
+            "FLY": False,
+            "MIRROR_PF_X": False,
+            "MIRROR_PF_Y": False,
+            "MIRROR_HUD_X": False,
+            "PITCH": False,
+        }
+
+        # Реестр виджетов тумблеров для синхронного обновления
+        self.toggle_widgets = {}
+
+        # Настройки слайдеров по умолчанию
         self.cs_min_val = 0.40
         self.cs_max_val = 1.70
 
@@ -39,1154 +93,1397 @@ class ModernControlPanel:
         self.event_delay_seconds = tk.DoubleVar(value=3.0)
         self.delay_scope = tk.StringVar(value="events")
         self._countdown_job = None
+        self._countdown_end_time = 0
+        self._countdown_cmd = ""
 
+        # Статус соединения (Auto-Ping)
+        self.is_connected = False
+        self._stop_ping = threading.Event()
+
+        # Настройка стилей ttk
+        self.setup_styles()
+
+        # Построение интерфейса
+        self.build_header()
+        self.build_quick_bar()
+        self.build_search_dropdown()
+        self.build_countdown_banner()
+        self.build_tabs()
+        self.build_footer()
+
+        # Привязка горячих клавиш
+        self.root.bind("<Control-r>", lambda e: self.reset_all_debuffs())
+        self.root.bind("<Control-R>", lambda e: self.reset_all_debuffs())
+        self.root.bind("<Control-f>", lambda e: self.focus_search())
+        self.root.bind("<Control-F>", lambda e: self.focus_search())
+        self.root.bind("<Escape>", lambda e: self.on_escape_key())
+
+        # Запуск фонового пинга сокета osu!
+        self.start_ping_thread()
+
+    def setup_styles(self):
         style = ttk.Style()
         style.theme_use("clam")
-        style.configure("TScale", background=self.panel_color, troughcolor=self.bg_color)
-        
-        # --- Настройка стилей вкладок ---
-        style.configure("TNotebook", background=self.bg_color, borderwidth=0)
-        style.configure("TNotebook.Tab", background=self.panel_color, foreground=self.text_color, padding=[10, 5], font=("Segoe UI", 10, "bold"))
-        style.map("TNotebook.Tab", background=[("selected", self.accent_blue)], foreground=[("selected", "#11111b")])
+        style.configure("TNotebook", background=self.bg_color, borderwidth=0, tabmargins=[0, 0, 0, 0])
+        style.configure(
+            "TNotebook.Tab",
+            background=self.panel_color,
+            foreground=self.text_dim,
+            padding=[14, 8],
+            font=("Segoe UI", 9, "bold"),
+            borderwidth=0
+        )
+        style.map(
+            "TNotebook.Tab",
+            background=[("selected", self.accent_blue), ("active", self.surface1)],
+            foreground=[("selected", self.accent_dark), ("active", "#ffffff")]
+        )
         style.configure("TFrame", background=self.bg_color)
-        self._vol_timer = None
-        
-        # Верхняя панель: Заголовок + Бейдж задержки + Шестеренка настроек
-        top_header_frame = tk.Frame(root, bg=self.bg_color)
-        top_header_frame.pack(fill=tk.X, padx=20, pady=(12, 4))
+        style.configure(
+            "TScale",
+            background=self.panel_color,
+            troughcolor=self.bg_color,
+            sliderlength=18,
+            sliderthickness=16
+        )
+        style.configure(
+            "Vertical.TScrollbar",
+            background=self.panel_color,
+            troughcolor=self.bg_color,
+            borderwidth=0,
+            arrowsize=12
+        )
 
-        left_spacer = tk.Frame(top_header_frame, bg=self.bg_color, width=80)
-        left_spacer.pack(side=tk.LEFT)
+    # =========================================================================
+    # ВЕРХНЯЯ ПАНЕЛЬ: ЗАГОЛОВОК, ПИНГ, RESET ALL, НАСТРОЙКИ
+    # =========================================================================
+    def build_header(self):
+        top_bar = tk.Frame(self.root, bg=self.bg_color)
+        top_bar.pack(fill=tk.X, padx=16, pady=(10, 4))
 
-        header = tk.Label(top_header_frame, text="OSU! DEBUFF CONTROL", font=("Segoe UI Black", 16), bg=self.bg_color, fg=self.accent_blue)
-        header.pack(side=tk.LEFT, expand=True)
+        # Левая часть: логотип и заголовок
+        left_box = tk.Frame(top_bar, bg=self.bg_color)
+        left_box.pack(side=tk.LEFT, fill=tk.Y)
 
-        settings_bar = tk.Frame(top_header_frame, bg=self.bg_color)
-        settings_bar.pack(side=tk.RIGHT)
+        title_lbl = tk.Label(
+            left_box,
+            text="OSU! CHAOS CONTROL",
+            font=("Segoe UI Black", 14),
+            bg=self.bg_color,
+            fg=self.accent_blue
+        )
+        title_lbl.pack(anchor=tk.W)
 
-        self.delay_badge = tk.Label(settings_bar, text="⏱️ 3с", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.accent_yellow, padx=6, pady=2, cursor="hand2")
+        # Индикатор пинга/подключения
+        self.ping_indicator = tk.Label(
+            left_box,
+            text="● ПРОВЕРКА СЕТИ...",
+            font=("Segoe UI", 8, "bold"),
+            bg=self.bg_color,
+            fg=self.accent_yellow,
+            cursor="hand2"
+        )
+        self.ping_indicator.pack(anchor=tk.W)
+        self.ping_indicator.bind("<Button-1>", lambda e: self.check_connection_now())
+
+        # Правая часть: кнопки действий
+        right_box = tk.Frame(top_bar, bg=self.bg_color)
+        right_box.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Кнопка ПАНИКА / СБРОСИТЬ ВСЁ (Reset All)
+        self.panic_btn = tk.Button(
+            right_box,
+            text="🚨 СБРОСИТЬ ВСЁ",
+            font=("Segoe UI", 9, "bold"),
+            bg=self.accent_red,
+            fg=self.accent_dark,
+            activebackground="#e06c75",
+            activeforeground=self.accent_dark,
+            bd=0,
+            padx=10,
+            pady=4,
+            cursor="hand2",
+            command=self.reset_all_debuffs
+        )
+        self.panic_btn.pack(side=tk.LEFT, padx=(0, 6))
+
+        # Бейдж задержки
+        self.delay_badge = tk.Label(
+            right_box,
+            text="⏱️ 3с",
+            font=("Segoe UI", 9, "bold"),
+            bg=self.panel_color,
+            fg=self.accent_yellow,
+            padx=8,
+            pady=4,
+            cursor="hand2"
+        )
         self.delay_badge.pack(side=tk.LEFT, padx=(0, 6))
         self.delay_badge.bind("<Button-1>", lambda e: self.open_settings())
 
-        self.settings_btn = tk.Button(settings_bar, text="⚙️", font=("Segoe UI", 13), bg=self.panel_color, fg="#cdd6f4", activebackground=self.accent_blue, activeforeground="#11111b", bd=0, relief=tk.FLAT, cursor="hand2", padx=6, pady=0, command=self.open_settings)
+        # Шестеренка настроек
+        self.settings_btn = tk.Button(
+            right_box,
+            text="⚙️",
+            font=("Segoe UI", 12),
+            bg=self.panel_color,
+            fg=self.text_color,
+            activebackground=self.accent_blue,
+            activeforeground=self.accent_dark,
+            bd=0,
+            padx=7,
+            pady=2,
+            cursor="hand2",
+            command=self.open_settings
+        )
         self.settings_btn.pack(side=tk.LEFT)
-        
-        # Блок подключения
-        conn_frame = tk.Frame(root, bg=self.panel_color, padx=15, pady=5)
-        conn_frame.pack(fill=tk.X, padx=20, pady=4)
-        tk.Label(conn_frame, text="IP Игрока:", font=("Segoe UI", 10, "bold"), bg=self.panel_color, fg=self.text_color).pack(side=tk.LEFT)
-        self.ip_entry = tk.Entry(conn_frame, font=("Segoe UI", 11), bg=self.bg_color, fg=self.text_color, bd=0)
+
+        # Строка ввода IP (компактная карточка)
+        ip_frame = tk.Frame(self.root, bg=self.panel_color, padx=10, pady=4)
+        ip_frame.pack(fill=tk.X, padx=16, pady=(4, 6))
+
+        tk.Label(
+            ip_frame,
+            text="IP Игрока:",
+            font=("Segoe UI", 9, "bold"),
+            bg=self.panel_color,
+            fg=self.text_dim
+        ).pack(side=tk.LEFT)
+
+        self.ip_entry = tk.Entry(
+            ip_frame,
+            font=("Consolas", 10, "bold"),
+            bg=self.bg_color,
+            fg=self.accent_green,
+            bd=0,
+            insertbackground=self.accent_green
+        )
         self.ip_entry.insert(0, "127.0.0.1")
-        self.ip_entry.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(10, 0))
-        
-        # Создаем Notebook (Вкладки)
-        notebook = ttk.Notebook(root)
-        notebook.pack(fill=tk.BOTH, expand=True, padx=20, pady=8)
+        self.ip_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 8))
+        self.ip_entry.bind("<FocusOut>", lambda e: self.check_connection_now())
 
-        # Вкладка 1: Базовые (со скроллом)
-        tab1_outer = ttk.Frame(notebook)
-        notebook.add(tab1_outer, text="Базовые")
-        
-        tab1_canvas = tk.Canvas(tab1_outer, bg=self.bg_color, highlightthickness=0)
-        tab1_scrollbar = ttk.Scrollbar(tab1_outer, orient="vertical", command=tab1_canvas.yview)
-        tab1 = tk.Frame(tab1_canvas, bg=self.bg_color)
-        
-        tab1_canvas.configure(yscrollcommand=tab1_scrollbar.set)
-        tab1_scrollbar.pack(side="right", fill="y")
-        tab1_canvas.pack(side="left", fill="both", expand=True)
-        tab1_window = tab1_canvas.create_window((0, 0), window=tab1, anchor="nw")
-        
-        def configure_tab1_canvas(event):
-            tab1_canvas.itemconfig(tab1_window, width=event.width)
-            
-        def configure_tab1_frame(event):
-            tab1_canvas.configure(scrollregion=tab1_canvas.bbox("all"))
-            
-        tab1_canvas.bind('<Configure>', configure_tab1_canvas)
-        tab1.bind('<Configure>', configure_tab1_frame)
+        check_btn = tk.Button(
+            ip_frame,
+            text="Проверить 📶",
+            font=("Segoe UI", 8, "bold"),
+            bg=self.surface1,
+            fg=self.text_color,
+            activebackground=self.accent_blue,
+            activeforeground=self.accent_dark,
+            bd=0,
+            padx=6,
+            pady=1,
+            cursor="hand2",
+            command=self.check_connection_now
+        )
+        check_btn.pack(side=tk.RIGHT)
 
-        # Вкладка 2: Курсор (со скроллом)
-        tab_cursor_outer = ttk.Frame(notebook)
-        notebook.add(tab_cursor_outer, text="Курсор")
-        
-        tab_cursor_canvas = tk.Canvas(tab_cursor_outer, bg=self.bg_color, highlightthickness=0)
-        tab_cursor_scrollbar = ttk.Scrollbar(tab_cursor_outer, orient="vertical", command=tab_cursor_canvas.yview)
-        tab_cursor = tk.Frame(tab_cursor_canvas, bg=self.bg_color)
-        
-        tab_cursor_canvas.configure(yscrollcommand=tab_cursor_scrollbar.set)
-        tab_cursor_scrollbar.pack(side="right", fill="y")
-        tab_cursor_canvas.pack(side="left", fill="both", expand=True)
-        tab_cursor_window = tab_cursor_canvas.create_window((0, 0), window=tab_cursor, anchor="nw")
-        
-        def configure_tab_cursor_canvas(event):
-            tab_cursor_canvas.itemconfig(tab_cursor_window, width=event.width)
-            
-        def configure_tab_cursor_frame(event):
-            tab_cursor_canvas.configure(scrollregion=tab_cursor_canvas.bbox("all"))
-            
-        tab_cursor_canvas.bind('<Configure>', configure_tab_cursor_canvas)
-        tab_cursor.bind('<Configure>', configure_tab_cursor_frame)
-        
-        # Вкладка 3: Искажения экрана (со скроллом)
-        tab2_outer = ttk.Frame(notebook)
-        notebook.add(tab2_outer, text="Искажения")
-        
-        tab2_canvas = tk.Canvas(tab2_outer, bg=self.bg_color, highlightthickness=0)
-        tab2_scrollbar = ttk.Scrollbar(tab2_outer, orient="vertical", command=tab2_canvas.yview)
-        tab2 = tk.Frame(tab2_canvas, bg=self.bg_color)
-        
-        tab2_canvas.configure(yscrollcommand=tab2_scrollbar.set)
-        tab2_scrollbar.pack(side="right", fill="y")
-        tab2_canvas.pack(side="left", fill="both", expand=True)
-        tab2_window = tab2_canvas.create_window((0, 0), window=tab2, anchor="nw")
-        
-        def configure_tab2_canvas(event):
-            tab2_canvas.itemconfig(tab2_window, width=event.width)
-            
-        def configure_tab2_frame(event):
-            tab2_canvas.configure(scrollregion=tab2_canvas.bbox("all"))
-            
-        tab2_canvas.bind('<Configure>', configure_tab2_canvas)
-        tab2.bind('<Configure>', configure_tab2_frame)
+    # =========================================================================
+    # БЫСТРЫЙ ПОИСК И ПАНЕЛЬ ИЗБРАННОГО
+    # =========================================================================
+    def build_quick_bar(self):
+        quick_frame = tk.Frame(self.root, bg=self.bg_color)
+        quick_frame.pack(fill=tk.X, padx=16, pady=(0, 6))
 
-        # Вкладка 4: Ивенты & Троллинг (со скроллом)
-        tab3_outer = ttk.Frame(notebook)
-        notebook.add(tab3_outer, text="Ивенты")
-        
-        tab3_canvas = tk.Canvas(tab3_outer, bg=self.bg_color, highlightthickness=0)
-        tab3_scrollbar = ttk.Scrollbar(tab3_outer, orient="vertical", command=tab3_canvas.yview)
-        tab3 = tk.Frame(tab3_canvas, bg=self.bg_color)
-        
-        tab3_canvas.configure(yscrollcommand=tab3_scrollbar.set)
-        tab3_scrollbar.pack(side="right", fill="y")
-        tab3_canvas.pack(side="left", fill="both", expand=True)
-        tab3_window = tab3_canvas.create_window((0, 0), window=tab3, anchor="nw")
-        
-        def configure_tab3_canvas(event):
-            tab3_canvas.itemconfig(tab3_window, width=event.width)
-            
-        def configure_tab3_frame(event):
-            tab3_canvas.configure(scrollregion=tab3_canvas.bbox("all"))
-            
-        tab3_canvas.bind('<Configure>', configure_tab3_canvas)
-        tab3.bind('<Configure>', configure_tab3_frame)
+        # 1. Поле быстрого поиска (Search Bar)
+        search_box = tk.Frame(quick_frame, bg=self.panel_color, padx=8, pady=3)
+        search_box.pack(fill=tk.X, pady=(0, 4))
 
-        # Вкладка 5: Галлюцинации
-        tab4 = ttk.Frame(notebook)
-        notebook.add(tab4, text="Галлюцинации")
+        tk.Label(
+            search_box,
+            text="🔍",
+            font=("Segoe UI", 10),
+            bg=self.panel_color,
+            fg=self.text_dim
+        ).pack(side=tk.LEFT, padx=(0, 6))
 
-        # Обработчик скролла мыши для всех вкладок
+        self.search_var = tk.StringVar()
+        self.search_entry = tk.Entry(
+            search_box,
+            textvariable=self.search_var,
+            font=("Segoe UI", 9),
+            bg=self.panel_color,
+            fg=self.text_color,
+            bd=0,
+            insertbackground=self.text_color
+        )
+        self.search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.search_entry.insert(0, "Быстрый поиск (Ctrl+F)...")
+        self.search_entry.bind("<FocusIn>", self._on_search_focus_in)
+        self.search_entry.bind("<FocusOut>", self._on_search_focus_out)
+        self.search_var.trace_add("write", self._on_search_change)
+
+        self.search_clear_btn = tk.Label(
+            search_box,
+            text="✕",
+            font=("Segoe UI", 9, "bold"),
+            bg=self.panel_color,
+            fg=self.text_dim,
+            cursor="hand2"
+        )
+        self.search_clear_btn.pack(side=tk.RIGHT, padx=4)
+        self.search_clear_btn.bind("<Button-1>", lambda e: self.clear_search())
+
+        # 2. Панель избранного / Топ-5 частых пранков
+        fav_frame = tk.Frame(quick_frame, bg=self.bg_color)
+        fav_frame.pack(fill=tk.X)
+
+        tk.Label(
+            fav_frame,
+            text="⭐ Топ:",
+            font=("Segoe UI", 8, "bold"),
+            bg=self.bg_color,
+            fg=self.accent_yellow
+        ).pack(side=tk.LEFT, padx=(0, 4))
+
+        top_actions = [
+            ("🧩 Каптча", "TROLL:CAPTCHA", self.accent_green),
+            ("🌪️ Срыв мыши", "TROLL:SPINOUT", self.accent_peach),
+            ("💻 BSOD", "TROLL:BSOD", self.accent_blue),
+            ("📱 Мамуля", "TROLL:TELEGRAM", self.accent_cyan),
+            ("🫨 Дрожание", "JITTER:25", self.accent_mauve),
+        ]
+
+        for text, cmd, color in top_actions:
+            btn = tk.Button(
+                fav_frame,
+                text=text,
+                font=("Segoe UI", 8, "bold"),
+                bg=self.panel_color,
+                fg=color,
+                activebackground=color,
+                activeforeground=self.accent_dark,
+                bd=0,
+                padx=6,
+                pady=2,
+                cursor="hand2",
+                command=lambda c=cmd: self.send_command(c)
+            )
+            btn.pack(side=tk.LEFT, padx=2, fill=tk.X, expand=True)
+
+    def _init_search_database(self):
+        return [
+            ("Каптча: Случайная (Пауза)", "TROLL:CAPTCHA:RANDOM", "Пранк", self.accent_green),
+            ("Каптча: Математика 2x2", "TROLL:CAPTCHA:MATH", "Пранк", self.accent_green),
+            ("Каптча: reCAPTCHA (Я не робот)", "TROLL:CAPTCHA:RECAPTCHA", "Пранк", self.accent_green),
+            ("Каптча: Загадка osu! 2x2", "TROLL:CAPTCHA:TRIVIA", "Пранк", self.accent_green),
+            ("Срыв сенсора мыши (в угол)", "TROLL:SPINOUT", "Курсор", self.accent_peach),
+            ("Отключение мыши (1.8s + звук)", "DEVICE_DISCONNECT", "Курсор", self.accent_red),
+            ("Синий экран смерти (BSOD)", "TROLL:BSOD", "Пранк", self.accent_blue),
+            ("Звонок Telegram (Мамуля)", "TROLL:TELEGRAM", "Пранк", self.accent_cyan),
+            ("Звонок Discord", "TROLL:DISCORD", "Пранк", "#5865F2"),
+            ("Steam сообщение (Шаурма)", "TROLL:STEAM", "Пранк", "#66c0f4"),
+            ("3D Стук в дверь (звук)", "TROLL:KNOCK", "Звук", self.accent_yellow),
+            ("Писк комара (звук 1)", "TROLL:MOSQUITO:1", "Звук", self.accent_yellow),
+            ("Донат от Папича (5000₽)", "TROLL:DONATE", "Пранк", self.accent_peach),
+            ("Обновление Windows (3.5s)", "TROLL:UPDATE", "Пранк", self.accent_blue),
+            ("Отвал видеокарты (Глитч)", "TROLL:GLITCH", "Пранк", self.accent_pink),
+            ("Сбой видеодрайвера (Черный экран)", "TROLL:GPU_CRASH", "Пранк", "#76b900"),
+            ("Залипание клавиш Windows", "TROLL:STICKYKEYS", "Пранк", self.accent_mauve),
+            ("Трясущиеся руки (Джиттер 25px)", "JITTER:25", "Курсор", self.accent_mauve),
+            ("Инпут-лаг (200 ms)", "INPUT_LAG:200", "Курсор", self.accent_red),
+            ("Армия клонов курсора (10)", "CLONES_ON", "Курсор", self.accent_pink),
+            ("Скрыть курсор (Невидимка)", "HIDE_CURSOR:ON", "Курсор", self.accent_red),
+            ("Колесико загрузки курсора", "BUSY_CURSOR_ON", "Курсор", self.accent_cyan),
+            ("Бочка 360° (Вращение экрана)", "BARREL_ROLL", "Экран", self.accent_mauve),
+            ("Пьяная камера (Качка)", "DRUNK_ON", "Экран", self.accent_yellow),
+            ("Ограничение 15 FPS (Слайдшоу)", "SET_FPS:15", "Экран", self.accent_peach),
+            ("Эффект 144p (Мозаика)", "MOSAIC_ON", "Экран", self.accent_cyan),
+            ("Инверсия цветов (Негатив)", "INVERT_COLORS_ON", "Экран", self.accent_yellow),
+            ("Туннельное зрение (Фонарик)", "TUNNEL_ON", "Экран", self.accent_cyan),
+            ("Невидимые слайдеры", "GHOST_SLIDERS_ON", "Экран", self.accent_mauve),
+            ("Звук под водой (Low-Pass)", "MUFFLED_ON", "Звук", self.accent_blue),
+            ("8D Панорама (Вращение)", "PAN_SPIN_ON", "Звук", self.accent_pink),
+            ("Остановка винила (Tape Stop)", "TAPE_STOP", "Звук", self.accent_peach),
+            ("Эхо в соборе (Reverb)", "REVERB_ON", "Звук", self.accent_mauve),
+            ("Bass Boost / Ear Rape", "BASS_BOOST_ON", "Звук", self.accent_red),
+            ("Землетрясение интерфейса", "EARTHQUAKE_ON", "Экран", self.accent_peach),
+            ("Flashbang (Вспышка)", "FLASHBANG", "Пранк", "#ffffff"),
+            ("Блэкаут (Остановка времени)", "FREEZE_ON", "Геймплей", self.accent_mauve),
+            ("Муха на мониторе", "FLY_ON", "Пранк", self.accent_green),
+        ]
+
+    def build_search_dropdown(self):
+        self.search_results_frame = tk.Frame(
+            self.root,
+            bg=self.card_color,
+            highlightthickness=1,
+            highlightbackground=self.accent_blue,
+            padx=6,
+            pady=6
+        )
+        self.search_db = self._init_search_database()
+
+    def _on_search_focus_in(self, event):
+        if self.search_entry.get() == "Быстрый поиск (Ctrl+F)...":
+            self.search_entry.delete(0, tk.END)
+            self.search_entry.config(fg=self.text_color)
+
+    def _on_search_focus_out(self, event):
+        if not self.search_entry.get().strip():
+            self.search_entry.insert(0, "Быстрый поиск (Ctrl+F)...")
+            self.search_entry.config(fg=self.text_dim)
+
+    def _on_search_change(self, *args):
+        query = self.search_var.get().strip().lower()
+        if not query or query == "быстрый поиск (ctrl+f)...":
+            if self.search_results_frame.winfo_ismapped():
+                self.search_results_frame.pack_forget()
+            return
+
+        matches = []
+        for name, cmd, cat, col in self.search_db:
+            if query in name.lower() or query in cat.lower() or query in cmd.lower():
+                matches.append((name, cmd, cat, col))
+
+        for child in self.search_results_frame.winfo_children():
+            child.destroy()
+
+        if not matches:
+            tk.Label(
+                self.search_results_frame,
+                text="Ничего не найдено",
+                font=("Segoe UI", 9),
+                bg=self.card_color,
+                fg=self.text_dim
+            ).pack(pady=4)
+        else:
+            for name, cmd, cat, col in matches[:6]:
+                row = tk.Frame(self.search_results_frame, bg=self.panel_color, padx=6, pady=3)
+                row.pack(fill=tk.X, pady=2)
+
+                tk.Label(
+                    row,
+                    text=f"[{cat}]",
+                    font=("Segoe UI", 8, "bold"),
+                    bg=self.panel_color,
+                    fg=col,
+                    width=9,
+                    anchor=tk.W
+                ).pack(side=tk.LEFT)
+
+                tk.Label(
+                    row,
+                    text=name,
+                    font=("Segoe UI", 9),
+                    bg=self.panel_color,
+                    fg=self.text_color,
+                    anchor=tk.W
+                ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
+
+                tk.Button(
+                    row,
+                    text="Запуск ▶",
+                    font=("Segoe UI", 8, "bold"),
+                    bg=col,
+                    fg=self.accent_dark,
+                    activebackground=self.accent_green,
+                    activeforeground=self.accent_dark,
+                    bd=0,
+                    padx=8,
+                    pady=1,
+                    cursor="hand2",
+                    command=lambda c=cmd: [self.clear_search(), self.send_command(c)]
+                ).pack(side=tk.RIGHT)
+
+        if not self.search_results_frame.winfo_ismapped():
+            self.search_results_frame.pack(fill=tk.X, padx=16, pady=(0, 6), before=self.notebook)
+
+    def clear_search(self):
+        self.search_var.set("")
+        if self.search_results_frame.winfo_ismapped():
+            self.search_results_frame.pack_forget()
+        self.root.focus_set()
+
+    def focus_search(self):
+        self.search_entry.focus_set()
+        self.search_entry.select_range(0, tk.END)
+
+    def on_escape_key(self):
+        if self._countdown_job is not None:
+            self.cancel_countdown()
+        else:
+            self.clear_search()
+
+    # =========================================================================
+    # БАННЕР ОБРАТНОГО ОТСЧЕТА (Alt-Tab Delay)
+    # =========================================================================
+    def build_countdown_banner(self):
+        self.countdown_banner = tk.Frame(
+            self.root,
+            bg=self.panel_color,
+            highlightthickness=1,
+            highlightbackground=self.accent_yellow,
+            padx=12,
+            pady=8
+        )
+        top_row = tk.Frame(self.countdown_banner, bg=self.panel_color)
+        top_row.pack(fill=tk.X)
+
+        self.countdown_lbl = tk.Label(
+            top_row,
+            text="",
+            font=("Segoe UI", 10, "bold"),
+            bg=self.panel_color,
+            fg=self.accent_yellow
+        )
+        self.countdown_lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        self.countdown_cancel_btn = tk.Button(
+            top_row,
+            text="✕ Отмена (Esc)",
+            font=("Segoe UI", 9, "bold"),
+            bg=self.accent_red,
+            fg=self.accent_dark,
+            activebackground="#e06c75",
+            activeforeground=self.accent_dark,
+            bd=0,
+            padx=8,
+            pady=2,
+            cursor="hand2",
+            command=self.cancel_countdown
+        )
+        self.countdown_cancel_btn.pack(side=tk.RIGHT)
+
+        self.countdown_canvas = tk.Canvas(
+            self.countdown_banner,
+            height=4,
+            bg=self.bg_color,
+            highlightthickness=0
+        )
+        self.countdown_canvas.pack(fill=tk.X, pady=(6, 0))
+
+    # =========================================================================
+    # ВКЛАДКИ (Notebook & Scrollbars)
+    # =========================================================================
+    def build_tabs(self):
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=16, pady=4)
+
+        # 1. Геймплей
+        self.tab1, tab1_canvas = self._create_scrollable_tab(self.notebook, "⚡ Геймплей")
+        # 2. Курсор & Ввод
+        self.tab_cursor, tab_cursor_canvas = self._create_scrollable_tab(self.notebook, "🖱️ Курсор")
+        # 3. Искажения & Аудио
+        self.tab2, tab2_canvas = self._create_scrollable_tab(self.notebook, "🌀 Искажения")
+        # 4. Пранки & Ивенты
+        self.tab3, tab3_canvas = self._create_scrollable_tab(self.notebook, "🎭 Пранки")
+        # 5. Радар нот
+        self.tab4 = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab4, text="🎯 Радар")
+
         def _on_mousewheel(event):
             delta = int(-1 * (event.delta / 120))
-            if tab1_canvas.winfo_ismapped():
+            selected_text = self.notebook.tab(self.notebook.select(), "text")
+            if "Геймплей" in selected_text:
                 tab1_canvas.yview_scroll(delta, "units")
-            elif tab2_canvas.winfo_ismapped():
-                tab2_canvas.yview_scroll(delta, "units")
-            elif tab_cursor_canvas.winfo_ismapped():
+            elif "Курсор" in selected_text:
                 tab_cursor_canvas.yview_scroll(delta, "units")
-            elif tab3_canvas.winfo_ismapped():
+            elif "Искажения" in selected_text:
+                tab2_canvas.yview_scroll(delta, "units")
+            elif "Пранки" in selected_text:
                 tab3_canvas.yview_scroll(delta, "units")
-                
-        root.bind_all("<MouseWheel>", _on_mousewheel)
-
-        # ==========================================
-        # Вкладка 1: ГЕЙМПЛЕЙ (Хаос, Ветер, Магнит, Черная Дыра)
-        # ==========================================
-        
-        # --- СЕКЦИЯ: ХАОС ---
-        chaos_frame = tk.Frame(tab1, bg=self.panel_color, padx=15, pady=10)
-        chaos_frame.pack(fill=tk.X, pady=5)
-        self.chaos_header = tk.Label(chaos_frame, text="1. ХАОС (ВЫКЛЮЧЕН 🔴)", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.chaos_header.pack(anchor=tk.W, pady=(0, 5))
-        
-        btn_frame1 = tk.Frame(chaos_frame, bg=self.panel_color)
-        btn_frame1.pack(fill=tk.X)
-        tk.Button(btn_frame1, text="ВКЛЮЧИТЬ", font=("Segoe UI", 10, "bold"), bg=self.accent_on, fg="#11111b", bd=0, command=lambda: self.send_command("CHAOS_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_frame1, text="ВЫКЛЮЧИТЬ", font=("Segoe UI", 10, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("CHAOS_OFF")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
-        
-        tk.Label(chaos_frame, text="Сила хаоса:", font=("Segoe UI", 9), bg=self.panel_color, fg=self.text_color).pack(anchor=tk.W, pady=(5, 0))
-        self.chaos_slider = ttk.Scale(chaos_frame, from_=0.0, to=2.0, orient=tk.HORIZONTAL, command=lambda val: self.send_command(f"STRENGTH:{float(val):.2f}"))
-        self.chaos_slider.set(1.0)
-        self.chaos_slider.pack(fill=tk.X)
-
-        # --- СЕКЦИЯ: ВЕТЕР ---
-        wind_frame = tk.Frame(tab1, bg=self.panel_color, padx=15, pady=10)
-        wind_frame.pack(fill=tk.X, pady=5)
-        self.wind_header = tk.Label(wind_frame, text="2. ВЕТЕР (ВЫКЛЮЧЕН 🔴)", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.wind_header.pack(anchor=tk.W, pady=(0, 5))
-        
-        btn_frame2 = tk.Frame(wind_frame, bg=self.panel_color)
-        btn_frame2.pack(fill=tk.X)
-        tk.Button(btn_frame2, text="ВКЛЮЧИТЬ", font=("Segoe UI", 10, "bold"), bg=self.accent_blue, fg="#11111b", bd=0, command=lambda: self.send_command("WIND_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_frame2, text="ВЫКЛЮЧИТЬ", font=("Segoe UI", 10, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("WIND_OFF")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
-        
-        tk.Label(wind_frame, text="Сила ветра:", font=("Segoe UI", 9), bg=self.panel_color, fg=self.text_color).pack(anchor=tk.W, pady=(5, 0))
-        self.wind_slider = ttk.Scale(wind_frame, from_=0.0, to=3.0, orient=tk.HORIZONTAL, command=lambda val: self.send_command(f"WIND_STRENGTH:{float(val):.2f}"))
-        self.wind_slider.set(1.0)
-        self.wind_slider.pack(fill=tk.X)
-        
-        tk.Label(wind_frame, text="Направление ветра (Градусы):", font=("Segoe UI", 9), bg=self.panel_color, fg=self.text_color).pack(anchor=tk.W, pady=(5, 0))
-        self.dir_slider = ttk.Scale(wind_frame, from_=0.0, to=360.0, orient=tk.HORIZONTAL, command=lambda val: self.send_command(f"WIND_DIR:{float(val):.2f}"))
-        self.dir_slider.set(0.0)
-        self.dir_slider.pack(fill=tk.X)
-
-        # --- СЕКЦИЯ: МАГНИТ (ОТТАЛКИВАНИЕ НОТ ОТ КУРСОРА) ---
-        magnet_frame = tk.Frame(tab1, bg=self.panel_color, padx=15, pady=10)
-        magnet_frame.pack(fill=tk.X, pady=5)
-        self.magnet_header = tk.Label(magnet_frame, text="3. МАГНИТ НОТ (ВЫКЛЮЧЕН 🔴)", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.magnet_header.pack(anchor=tk.W, pady=(0, 5))
-        
-        btn_frame3 = tk.Frame(magnet_frame, bg=self.panel_color)
-        btn_frame3.pack(fill=tk.X)
-        tk.Button(btn_frame3, text="ВКЛЮЧИТЬ", font=("Segoe UI", 10, "bold"), bg=self.accent_yellow, fg="#11111b", bd=0, command=lambda: self.send_command("MAGNET_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_frame3, text="ВЫКЛЮЧИТЬ", font=("Segoe UI", 10, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("MAGNET_OFF")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
-        
-        tk.Label(magnet_frame, text="Сила отталкивания:", font=("Segoe UI", 9), bg=self.panel_color, fg=self.text_color).pack(anchor=tk.W, pady=(5, 0))
-        self.magnet_slider = ttk.Scale(magnet_frame, from_=0.0, to=3.0, orient=tk.HORIZONTAL, command=lambda val: self.send_command(f"MAGNET_STRENGTH:{float(val):.2f}"))
-        self.magnet_slider.set(1.0)
-        self.magnet_slider.pack(fill=tk.X)
-
-        # --- СЕКЦИЯ: ЧЁРНАЯ ДЫРА (ГРАВИТАЦИЯ НОТ) ---
-        bh_frame = tk.Frame(tab1, bg=self.panel_color, padx=15, pady=10)
-        bh_frame.pack(fill=tk.X, pady=5)
-        self.bh_header = tk.Label(bh_frame, text="4. ЧЁРНАЯ ДЫРА (ВЫКЛЮЧЕНА 🔴)", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.bh_header.pack(anchor=tk.W, pady=(0, 5))
-        tk.Label(bh_frame, text="Притягивает все ноты к центру экрана (256, 192). Искажает геометрию карты!", font=("Segoe UI", 9), bg=self.panel_color, fg="#a6adc8").pack(anchor=tk.W, pady=(0, 8))
-
-        btn_frame_bh = tk.Frame(bh_frame, bg=self.panel_color)
-        btn_frame_bh.pack(fill=tk.X, pady=2)
-        tk.Button(btn_frame_bh, text="ВКЛЮЧИТЬ", font=("Segoe UI", 10, "bold"), bg=self.accent_blackout, fg="#11111b", bd=0, command=lambda: self.send_command("BLACK_HOLE_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_frame_bh, text="ВЫКЛЮЧИТЬ", font=("Segoe UI", 10, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("BLACK_HOLE_OFF")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
-
-        btn_bh_presets = tk.Frame(bh_frame, bg=self.panel_color)
-        btn_bh_presets.pack(fill=tk.X, pady=(5, 2))
-        tk.Button(btn_bh_presets, text="0.5x (Слабая)", font=("Segoe UI", 8, "bold"), bg=self.accent_blue, fg="#11111b", bd=0, command=lambda: self.set_bh_strength(0.5)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_bh_presets, text="1.0x (Норма)", font=("Segoe UI", 8, "bold"), bg=self.accent_yellow, fg="#11111b", bd=0, command=lambda: self.set_bh_strength(1.0)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_bh_presets, text="2.0x (Сильная)", font=("Segoe UI", 8, "bold"), bg=self.accent_earth, fg="#11111b", bd=0, command=lambda: self.set_bh_strength(2.0)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_bh_presets, text="4.0x (СИНГУЛЯРНОСТЬ)", font=("Segoe UI", 8, "bold"), bg=self.accent_red, fg="#11111b", bd=0, command=lambda: self.set_bh_strength(4.0)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-
-        tk.Label(bh_frame, text="Сила гравитации:", font=("Segoe UI", 9), bg=self.panel_color, fg=self.text_color).pack(anchor=tk.W, pady=(5, 0))
-        self.bh_slider = ttk.Scale(bh_frame, from_=0.0, to=4.0, orient=tk.HORIZONTAL, command=lambda val: self.send_command(f"BLACK_HOLE_STRENGTH:{float(val):.2f}"))
-        self.bh_slider.set(1.0)
-        self.bh_slider.pack(fill=tk.X)
-
-        # ==========================================
-        # Вкладка 2: КУРСОР (Физика, Лаг, Шизофрения, Ограничения)
-        # ==========================================
-
-        # --- СЕКЦИЯ: МАГНИТНОЕ ОТТАЛКИВАНИЕ ОТ НОТ (НОВОЕ В ФАЗЕ 4) ---
-        repulsion_frame = tk.Frame(tab_cursor, bg=self.panel_color, padx=15, pady=12)
-        repulsion_frame.pack(fill=tk.X, pady=5)
-        self.repulsion_header = tk.Label(repulsion_frame, text="ОТТАЛКИВАНИЕ КУРСОРА ОТ НОТ (ВЫКЛЮЧЕНО 🔴)", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.repulsion_header.pack(anchor=tk.W, pady=(0, 4))
-        tk.Label(repulsion_frame, text="Курсор физически отталкивается в сторону при приближении к нотам!", font=("Segoe UI", 9), bg=self.panel_color, fg="#a6adc8").pack(anchor=tk.W, pady=(0, 6))
-
-        btn_rep = tk.Frame(repulsion_frame, bg=self.panel_color)
-        btn_rep.pack(fill=tk.X, pady=2)
-        tk.Button(btn_rep, text="ВКЛЮЧИТЬ ОТТАЛКИВАНИЕ 🧲", font=("Segoe UI", 9, "bold"), bg=self.accent_yellow, fg="#11111b", bd=0, command=lambda: self.send_command("REPULSION_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_rep, text="ВЫКЛЮЧИТЬ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("REPULSION_OFF")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
-
-        # --- СЕКЦИЯ: ТРЯСУЩИЕСЯ РУКИ (ДЖИТТЕР) (НОВОЕ В ФАЗЕ 4) ---
-        jitter_frame = tk.Frame(tab_cursor, bg=self.panel_color, padx=15, pady=12)
-        jitter_frame.pack(fill=tk.X, pady=5)
-        self.jitter_header = tk.Label(jitter_frame, text="ТРЯСУЩИЕСЯ РУКИ (ДЖИТТЕР: 0 px 🔴)", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.jitter_header.pack(anchor=tk.W, pady=(0, 4))
-        tk.Label(jitter_frame, text="Высокочастотная вибрация курсора (эффект дрожания рук от адреналина)", font=("Segoe UI", 9), bg=self.panel_color, fg="#a6adc8").pack(anchor=tk.W, pady=(0, 6))
-
-        btn_jit_presets = tk.Frame(jitter_frame, bg=self.panel_color)
-        btn_jit_presets.pack(fill=tk.X, pady=2)
-        tk.Button(btn_jit_presets, text="ВЫКЛ (0)", font=("Segoe UI", 8, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.set_jitter(0)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_jit_presets, text="8px (Легкий)", font=("Segoe UI", 8, "bold"), bg=self.accent_blue, fg="#11111b", bd=0, command=lambda: self.set_jitter(8)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_jit_presets, text="18px (Средний)", font=("Segoe UI", 8, "bold"), bg=self.accent_yellow, fg="#11111b", bd=0, command=lambda: self.set_jitter(18)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_jit_presets, text="35px (ПАНИКА 🫨)", font=("Segoe UI", 8, "bold"), bg=self.accent_red, fg="#11111b", bd=0, command=lambda: self.set_jitter(35)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-
-        self.jitter_slider = ttk.Scale(jitter_frame, from_=0, to=50, orient=tk.HORIZONTAL, command=self.on_jitter_slider_change)
-        self.jitter_slider.set(0)
-        self.jitter_slider.pack(fill=tk.X, pady=(6, 2))
-
-        # --- СЕКЦИЯ: ИНПУТ-ЛАГ ---
-        lag_frame = tk.Frame(tab_cursor, bg=self.panel_color, padx=15, pady=12)
-        lag_frame.pack(fill=tk.X, pady=5)
-        self.lag_header = tk.Label(lag_frame, text="ИНПУТ-ЛАГ (ВЫКЛЮЧЕН 🔴)", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.lag_header.pack(anchor=tk.W, pady=(0, 4))
-        tk.Label(lag_frame, text="Физически задерживает координаты и клики. Ломает мышечную память!", font=("Segoe UI", 9), bg=self.panel_color, fg="#a6adc8").pack(anchor=tk.W, pady=(0, 6))
-
-        btn_lag_row1 = tk.Frame(lag_frame, bg=self.panel_color)
-        btn_lag_row1.pack(fill=tk.X, pady=2)
-        tk.Button(btn_lag_row1, text="ВЫКЛ (0 ms)", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.set_input_lag(0)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_lag_row1, text="50 ms", font=("Segoe UI", 9, "bold"), bg=self.accent_blue, fg="#11111b", bd=0, command=lambda: self.set_input_lag(50)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_lag_row1, text="100 ms", font=("Segoe UI", 9, "bold"), bg=self.accent_blue, fg="#11111b", bd=0, command=lambda: self.set_input_lag(100)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-
-        btn_lag_row2 = tk.Frame(lag_frame, bg=self.panel_color)
-        btn_lag_row2.pack(fill=tk.X, pady=2)
-        tk.Button(btn_lag_row2, text="200 ms", font=("Segoe UI", 9, "bold"), bg=self.accent_yellow, fg="#11111b", bd=0, command=lambda: self.set_input_lag(200)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_lag_row2, text="300 ms", font=("Segoe UI", 9, "bold"), bg=self.accent_earth, fg="#11111b", bd=0, command=lambda: self.set_input_lag(300)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_lag_row2, text="500 ms (АД)", font=("Segoe UI", 9, "bold"), bg=self.accent_on, fg="#11111b", bd=0, command=lambda: self.set_input_lag(500)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-
-        self.lag_label = tk.Label(lag_frame, text="Задержка: 0 ms", font=("Segoe UI", 9), bg=self.panel_color, fg=self.text_color)
-        self.lag_label.pack(anchor=tk.W, pady=(6, 0))
-        self.lag_slider = ttk.Scale(lag_frame, from_=0, to=500, orient=tk.HORIZONTAL, command=self.on_lag_slider_change)
-        self.lag_slider.set(0)
-        self.lag_slider.pack(fill=tk.X, pady=(2, 4))
-
-        # --- СЕКЦИЯ: ФЕЙКОВЫЕ КУРСОРЫ (ШИЗОФРЕНИЯ) ---
-        cursor_frame = tk.Frame(tab_cursor, bg=self.panel_color, padx=15, pady=12)
-        cursor_frame.pack(fill=tk.X, pady=5)
-        self.clones_header = tk.Label(cursor_frame, text="ФЕЙКОВЫЕ КУРСОРЫ (ШИЗОФРЕНИЯ)", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.clones_header.pack(anchor=tk.W, pady=(0, 4))
-        tk.Label(cursor_frame, text="Курсоры-обманки, копирующие клики и сбивающие с толку", font=("Segoe UI", 9), bg=self.panel_color, fg="#a6adc8").pack(anchor=tk.W, pady=(0, 5))
-
-        btn_fcf_clones = tk.Frame(cursor_frame, bg=self.panel_color)
-        btn_fcf_clones.pack(fill=tk.X, pady=2)
-        tk.Button(btn_fcf_clones, text="👥 АРМИЯ КЛОНОВ (10 КУРСОРОВ) 👥", font=("Segoe UI", 9, "bold"), bg="#f38ba8", fg="#11111b", bd=0, command=lambda: self.send_command("CLONES_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_fcf_clones, text="ВЫКЛЮЧИТЬ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("CLONES_OFF")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
-
-        btn_fcf_2 = tk.Frame(cursor_frame, bg=self.panel_color)
-        btn_fcf_2.pack(fill=tk.X, pady=2)
-        tk.Button(btn_fcf_2, text="ЗЕРКАЛО (X)", font=("Segoe UI", 9, "bold"), bg=self.accent_blue, fg="#11111b", bd=0, command=lambda: self.send_command("FAKE_CURSORS:MIRROR_X")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_fcf_2, text="ЗЕРКАЛО (Y)", font=("Segoe UI", 9, "bold"), bg=self.accent_blue, fg="#11111b", bd=0, command=lambda: self.send_command("FAKE_CURSORS:MIRROR_Y")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
-
-        btn_fcf_3 = tk.Frame(cursor_frame, bg=self.panel_color)
-        btn_fcf_3.pack(fill=tk.X, pady=2)
-        tk.Button(btn_fcf_3, text="ЦЕНТР ЗЕРКАЛО (X+Y)", font=("Segoe UI", 9, "bold"), bg=self.accent_blue, fg="#11111b", bd=0, command=lambda: self.send_command("FAKE_CURSORS:MIRROR_XY")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_fcf_3, text="РОЙ КУРСОРОВ (SWARM)", font=("Segoe UI", 9, "bold"), bg=self.accent_earth, fg="#11111b", bd=0, command=lambda: self.send_command("FAKE_CURSORS:SWARM")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
-
-        # --- СЕКЦИЯ: НЕВИДИМЫЙ КУРСОР ---
-        hide_cursor_frame = tk.Frame(tab_cursor, bg=self.panel_color, padx=15, pady=12)
-        hide_cursor_frame.pack(fill=tk.X, pady=5)
-        self.hide_cursor_header = tk.Label(hide_cursor_frame, text="НЕВИДИМЫЙ КУРСОР (ВЫКЛЮЧЕН 🔴)", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.hide_cursor_header.pack(anchor=tk.W, pady=(0, 4))
-        tk.Label(hide_cursor_frame, text="Скрывает сам спрайт курсора, оставляя только след", font=("Segoe UI", 9), bg=self.panel_color, fg="#a6adc8").pack(anchor=tk.W, pady=(0, 5))
-        
-        btn_hide_cursor = tk.Frame(hide_cursor_frame, bg=self.panel_color)
-        btn_hide_cursor.pack(fill=tk.X, pady=2)
-        tk.Button(btn_hide_cursor, text="СКРЫТЬ КУРСОР", font=("Segoe UI", 9, "bold"), bg=self.accent_red, fg="#11111b", bd=0, command=lambda: self.send_command("HIDE_CURSOR:ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_hide_cursor, text="ВЕРНУТЬ КУРСОР", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("HIDE_CURSOR:OFF")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
-
-        # --- СЕКЦИЯ: КОЛЕСИКО ЗАГРУЗКИ (BUSY CURSOR) (ФАЗА 5) ---
-        busy_cursor_frame = tk.Frame(tab_cursor, bg=self.panel_color, padx=15, pady=12)
-        busy_cursor_frame.pack(fill=tk.X, pady=5)
-        self.busy_cursor_header = tk.Label(busy_cursor_frame, text="КОЛЁСИКО ЗАГРУЗКИ (BUSY CURSOR ⏳)", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.busy_cursor_header.pack(anchor=tk.W, pady=(0, 4))
-        tk.Label(busy_cursor_frame, text="Вращающийся синий спиннер прямо на кончике курсора!", font=("Segoe UI", 9), bg=self.panel_color, fg="#a6adc8").pack(anchor=tk.W, pady=(0, 5))
-        
-        btn_busy = tk.Frame(busy_cursor_frame, bg=self.panel_color)
-        btn_busy.pack(fill=tk.X, pady=2)
-        tk.Button(btn_busy, text="ВКЛЮЧИТЬ СПИННЕР ⏳", font=("Segoe UI", 9, "bold"), bg="#89dceb", fg="#11111b", bd=0, command=lambda: self.send_command("BUSY_CURSOR_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_busy, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("BUSY_CURSOR_OFF")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
-
-        # --- СЕКЦИЯ: РАЗМЕР КУРСОРА ---
-        scale_cursor_frame = tk.Frame(tab_cursor, bg=self.panel_color, padx=15, pady=12)
-        scale_cursor_frame.pack(fill=tk.X, pady=5)
-        self.cursor_scale_header = tk.Label(scale_cursor_frame, text="РАЗМЕР КУРСОРА (1.0x)", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.cursor_scale_header.pack(anchor=tk.W, pady=(0, 4))
-
-        btn_cscale_row = tk.Frame(scale_cursor_frame, bg=self.panel_color)
-        btn_cscale_row.pack(fill=tk.X, pady=2)
-        tk.Button(btn_cscale_row, text="0.2x (Микро)", font=("Segoe UI", 9, "bold"), bg=self.accent_on, fg="#11111b", bd=0, command=lambda: self.set_cursor_scale(0.2)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_cscale_row, text="0.5x", font=("Segoe UI", 9, "bold"), bg=self.accent_yellow, fg="#11111b", bd=0, command=lambda: self.set_cursor_scale(0.5)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_cscale_row, text="1.0x (Норма)", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.set_cursor_scale(1.0)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_cscale_row, text="2.0x", font=("Segoe UI", 9, "bold"), bg=self.accent_earth, fg="#11111b", bd=0, command=lambda: self.set_cursor_scale(2.0)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_cscale_row, text="4.0x (Гигант)", font=("Segoe UI", 9, "bold"), bg=self.accent_on, fg="#11111b", bd=0, command=lambda: self.set_cursor_scale(4.0)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-
-        row_cscale = tk.Frame(scale_cursor_frame, bg=self.panel_color)
-        row_cscale.pack(fill=tk.X, pady=(6, 0))
-        self.cursor_scale_slider = ttk.Scale(row_cscale, from_=0.1, to=5.0, orient=tk.HORIZONTAL, command=self.on_cursor_scale_change)
-        self.cursor_scale_slider.set(1.0)
-        self.cursor_scale_slider.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        tk.Button(row_cscale, text="⟲", font=("Segoe UI", 12), bg=self.panel_color, fg=self.accent_blue, bd=0, cursor="hand2", command=lambda: self.set_cursor_scale(1.0)).pack(side=tk.RIGHT, padx=(5, 0))
-
-        # --- СЕКЦИЯ: ИНВЕРСИЯ УПРАВЛЕНИЯ (X / Y) ---
-        invert_frame = tk.Frame(tab_cursor, bg=self.panel_color, padx=15, pady=12)
-        invert_frame.pack(fill=tk.X, pady=5)
-        self.invert_header = tk.Label(invert_frame, text="ИНВЕРСИЯ ОСЕЙ (ВЫКЛЮЧЕНА 🔴)", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.invert_header.pack(anchor=tk.W, pady=(0, 4))
-
-        row_inv_x = tk.Frame(invert_frame, bg=self.panel_color)
-        row_inv_x.pack(fill=tk.X, pady=2)
-        tk.Label(row_inv_x, text="Ось X (Горизонталь):", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=20, anchor=tk.W).pack(side=tk.LEFT)
-        self.btn_inv_x_on = tk.Button(row_inv_x, text="ИНВЕРСИЯ X", font=("Segoe UI", 9, "bold"), bg=self.accent_on, fg="#11111b", bd=0, command=lambda: self.send_command("INVERT_X_ON"))
-        self.btn_inv_x_on.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        self.btn_inv_x_off = tk.Button(row_inv_x, text="НОРМА X", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("INVERT_X_OFF"))
-        self.btn_inv_x_off.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-
-        row_inv_y = tk.Frame(invert_frame, bg=self.panel_color)
-        row_inv_y.pack(fill=tk.X, pady=2)
-        tk.Label(row_inv_y, text="Ось Y (Вертикаль):", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=20, anchor=tk.W).pack(side=tk.LEFT)
-        self.btn_inv_y_on = tk.Button(row_inv_y, text="ИНВЕРСИЯ Y", font=("Segoe UI", 9, "bold"), bg=self.accent_on, fg="#11111b", bd=0, command=lambda: self.send_command("INVERT_Y_ON"))
-        self.btn_inv_y_on.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        self.btn_inv_y_off = tk.Button(row_inv_y, text="НОРМА Y", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("INVERT_Y_OFF"))
-        self.btn_inv_y_off.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-
-        row_inv_all = tk.Frame(invert_frame, bg=self.panel_color)
-        row_inv_all.pack(fill=tk.X, pady=(6, 2))
-        tk.Button(row_inv_all, text="ИНВЕРТИРОВАТЬ ОБЕ ОСИ (X + Y)", font=("Segoe UI", 9, "bold"), bg="#fab387", fg="#11111b", bd=0, command=lambda: [self.send_command("INVERT_X_ON"), self.send_command("INVERT_Y_ON")]).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(row_inv_all, text="СБРОС В НОРМУ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("INVERT_RESET")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-
-        # --- СЕКЦИЯ: ЗАЛИПАНИЕ КНОПКИ (KEY JAM) ---
-        jam_frame = tk.Frame(tab_cursor, bg=self.panel_color, padx=15, pady=12)
-        jam_frame.pack(fill=tk.X, pady=5)
-        self.jam_header = tk.Label(jam_frame, text="ЗАЛИПАНИЕ КЛАВИШ (K1 / K2)", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.jam_header.pack(anchor=tk.W, pady=(0, 4))
-
-        row_jam_k1 = tk.Frame(jam_frame, bg=self.panel_color)
-        row_jam_k1.pack(fill=tk.X, pady=2)
-        self.lbl_k1 = tk.Label(row_jam_k1, text="Клавиша K1 (Левая):", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=20, anchor=tk.W)
-        self.lbl_k1.pack(side=tk.LEFT)
-        tk.Button(row_jam_k1, text="ЗАЛИПЛА (БЛОК) ⚠️", font=("Segoe UI", 9, "bold"), bg=self.accent_red, fg="#11111b", bd=0, command=lambda: self.send_command("JAM_K1_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(row_jam_k1, text="РАБОТАЕТ ✅", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("JAM_K1_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-
-        row_jam_k2 = tk.Frame(jam_frame, bg=self.panel_color)
-        row_jam_k2.pack(fill=tk.X, pady=2)
-        self.lbl_k2 = tk.Label(row_jam_k2, text="Клавиша K2 (Правая):", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=20, anchor=tk.W)
-        self.lbl_k2.pack(side=tk.LEFT)
-        tk.Button(row_jam_k2, text="ЗАЛИПЛА (БЛОК) ⚠️", font=("Segoe UI", 9, "bold"), bg=self.accent_red, fg="#11111b", bd=0, command=lambda: self.send_command("JAM_K2_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(row_jam_k2, text="РАБОТАЕТ ✅", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("JAM_K2_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-
-        row_jam_all = tk.Frame(jam_frame, bg=self.panel_color)
-        row_jam_all.pack(fill=tk.X, pady=(6, 2))
-        tk.Button(row_jam_all, text="РАЗБЛОКИРОВАТЬ ОБЕ КЛАВИШИ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("JAM_RESET")).pack(fill=tk.X, expand=True, padx=2)
-
-        # ==========================================
-        # Вкладка 3: ИСКАЖЕНИЯ (Камера, Туннель, Звук, Масштаб)
-        # ==========================================
-
-        # --- СЕКЦИЯ: ПЬЯНАЯ КАМЕРА & ТРЯСКА ЭКРАНА (НОВОЕ В ФАЗЕ 4) ---
-        cam_frame = tk.Frame(tab2, bg=self.panel_color, padx=15, pady=12)
-        cam_frame.pack(fill=tk.X, pady=5)
-        self.cam_header = tk.Label(cam_frame, text="ПЬЯНАЯ КАМЕРА & ВРАЩЕНИЕ ЭКРАНА", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.cam_header.pack(anchor=tk.W, pady=(0, 4))
-
-        row_drunk = tk.Frame(cam_frame, bg=self.panel_color)
-        row_drunk.pack(fill=tk.X, pady=2)
-        self.lbl_drunk = tk.Label(row_drunk, text="Пьяная камера (Качка ±15°):", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=26, anchor=tk.W)
-        self.lbl_drunk.pack(side=tk.LEFT)
-        tk.Button(row_drunk, text="ВКЛЮЧИТЬ 🍾", font=("Segoe UI", 9, "bold"), bg=self.accent_yellow, fg="#11111b", bd=0, command=lambda: self.send_command("DRUNK_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(row_drunk, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("DRUNK_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-
-        # Фаза 5: Бочка 360° и Троттлинг 15 FPS
-        row_barrel = tk.Frame(cam_frame, bg=self.panel_color)
-        row_barrel.pack(fill=tk.X, pady=2)
-        tk.Button(row_barrel, text="🌀 БОЧКА / ВРАЩЕНИЕ ЭКРАНА 360° (3.5s) 🔄", font=("Segoe UI", 9, "bold"), bg="#cba6f7", fg="#11111b", bd=0, command=lambda: self.send_command("BARREL_ROLL")).pack(fill=tk.X, expand=True, padx=2)
-
-        # Фаза 6: Вечная карусель 360° (ВКЛ / ВЫКЛ)
-        row_carousel = tk.Frame(cam_frame, bg=self.panel_color)
-        row_carousel.pack(fill=tk.X, pady=2)
-        tk.Label(row_carousel, text="Вечная карусель 360°:", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=26, anchor=tk.W).pack(side=tk.LEFT)
-        tk.Button(row_carousel, text="ВКЛЮЧИТЬ 🌀", font=("Segoe UI", 9, "bold"), bg="#cba6f7", fg="#11111b", bd=0, command=lambda: self.send_command("CAROUSEL_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(row_carousel, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("CAROUSEL_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-
-        # Управление FPS игрока (Фаза 5)
-        fps_frame = tk.Frame(cam_frame, bg=self.bg_color, padx=10, pady=8, bd=1, relief=tk.SOLID)
-        fps_frame.pack(fill=tk.X, pady=(6, 2))
-        
-        fps_top = tk.Frame(fps_frame, bg=self.bg_color)
-        fps_top.pack(fill=tk.X)
-        tk.Label(fps_top, text="⏱️ ОГРАНИЧЕНИЕ FPS ИГРОКА 🎮:", font=("Segoe UI", 9, "bold"), bg=self.bg_color, fg=self.accent_earth).pack(side=tk.LEFT)
-        self.fps_status_lbl = tk.Label(fps_top, text="Без ограничений", font=("Segoe UI", 9, "bold"), bg=self.bg_color, fg=self.accent_off)
-        self.fps_status_lbl.pack(side=tk.RIGHT)
-        
-        # Пресеты: 15, 30, 60, 120, 240, Сброс
-        fps_btn_row1 = tk.Frame(fps_frame, bg=self.bg_color)
-        fps_btn_row1.pack(fill=tk.X, pady=(6, 2))
-        tk.Button(fps_btn_row1, text="15 FPS", font=("Segoe UI", 9, "bold"), bg="#fab387", fg="#11111b", bd=0, command=lambda: self.set_fps_target(15)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
-        tk.Button(fps_btn_row1, text="30 FPS", font=("Segoe UI", 9, "bold"), bg="#f9e2af", fg="#11111b", bd=0, command=lambda: self.set_fps_target(30)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
-        tk.Button(fps_btn_row1, text="60 FPS", font=("Segoe UI", 9, "bold"), bg="#a6e3a1", fg="#11111b", bd=0, command=lambda: self.set_fps_target(60)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
-        
-        fps_btn_row2 = tk.Frame(fps_frame, bg=self.bg_color)
-        fps_btn_row2.pack(fill=tk.X, pady=(2, 4))
-        tk.Button(fps_btn_row2, text="120 FPS", font=("Segoe UI", 9, "bold"), bg="#89dceb", fg="#11111b", bd=0, command=lambda: self.set_fps_target(120)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
-        tk.Button(fps_btn_row2, text="240 FPS", font=("Segoe UI", 9, "bold"), bg="#89b4fa", fg="#11111b", bd=0, command=lambda: self.set_fps_target(240)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
-        tk.Button(fps_btn_row2, text="СБРОС ♾️", font=("Segoe UI", 9, "bold"), bg="#b4befe", fg="#11111b", bd=0, command=lambda: self.set_fps_target(0)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
-        
-        # Слайдер точной настройки FPS (10 - 240)
-        fps_slider_row = tk.Frame(fps_frame, bg=self.bg_color)
-        fps_slider_row.pack(fill=tk.X, pady=(4, 0))
-        self.fps_slider = ttk.Scale(fps_slider_row, from_=10, to=240, value=60, orient=tk.HORIZONTAL, command=self.on_fps_slider_change)
-        self.fps_slider.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
-        tk.Button(fps_slider_row, text="Применить", font=("Segoe UI", 8, "bold"), bg=self.accent_blue, fg="#11111b", bd=0, command=self.apply_fps_slider).pack(side=tk.RIGHT)
-
-        # --- СЕКЦИЯ: ВИЗУАЛЬНЫЙ АД & НОТЫ (ФАЗА 5) ---
-        vis_frame = tk.Frame(tab2, bg=self.panel_color, padx=15, pady=12)
-        vis_frame.pack(fill=tk.X, pady=5)
-        self.vis_header = tk.Label(vis_frame, text="ВИЗУАЛЬНЫЙ АД & ХАОС НОТ (ФАЗА 5) 👁️", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.vis_header.pack(anchor=tk.W, pady=(0, 4))
-
-        row_cs_chaos = tk.Frame(vis_frame, bg=self.panel_color)
-        row_cs_chaos.pack(fill=tk.X, pady=2)
-        tk.Label(row_cs_chaos, text="Гигантизм vs Микро-ноты (CS):", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=26, anchor=tk.W).pack(side=tk.LEFT)
-        tk.Button(row_cs_chaos, text="ХАОС РАЗМЕРОВ 🎯", font=("Segoe UI", 9, "bold"), bg=self.accent_on, fg="#11111b", bd=0, command=lambda: self.send_command("CS_CHAOS_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(row_cs_chaos, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("CS_CHAOS_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-
-        # Настройка диапазона масштаба (Микро / Гигантизм)
-        cs_range_frame = tk.Frame(vis_frame, bg=self.bg_color, padx=10, pady=6, bd=1, relief=tk.SOLID)
-        cs_range_frame.pack(fill=tk.X, pady=(2, 6))
-
-        self.lbl_cs_range = tk.Label(cs_range_frame, text="Диапазон: Микро 0.40x  |  Гигантизм 1.70x", font=("Segoe UI", 9, "bold"), bg=self.bg_color, fg=self.accent_yellow)
-        self.lbl_cs_range.pack(anchor=tk.W, pady=(0, 4))
-
-        row_cs_min = tk.Frame(cs_range_frame, bg=self.bg_color)
-        row_cs_min.pack(fill=tk.X, pady=1)
-        tk.Label(row_cs_min, text="Микро (Min):", font=("Segoe UI", 8, "bold"), bg=self.bg_color, fg=self.text_color, width=12, anchor=tk.W).pack(side=tk.LEFT)
-        self.cs_min_slider = ttk.Scale(row_cs_min, from_=0.08, to=1.00, value=0.40, orient=tk.HORIZONTAL, command=self.on_cs_min_slider)
-        self.cs_min_slider.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
-
-        row_cs_max = tk.Frame(cs_range_frame, bg=self.bg_color)
-        row_cs_max.pack(fill=tk.X, pady=1)
-        tk.Label(row_cs_max, text="Макро (Max):", font=("Segoe UI", 8, "bold"), bg=self.bg_color, fg=self.text_color, width=12, anchor=tk.W).pack(side=tk.LEFT)
-        self.cs_max_slider = ttk.Scale(row_cs_max, from_=1.00, to=3.50, value=1.70, orient=tk.HORIZONTAL, command=self.on_cs_max_slider)
-        self.cs_max_slider.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
-
-        cs_presets_row = tk.Frame(cs_range_frame, bg=self.bg_color)
-        cs_presets_row.pack(fill=tk.X, pady=(4, 0))
-        tk.Button(cs_presets_row, text="Обычный (0.4x/1.7x)", font=("Segoe UI", 8, "bold"), bg=self.panel_color, fg=self.text_color, bd=0, command=lambda: self.set_cs_range(0.40, 1.70)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
-        tk.Button(cs_presets_row, text="Дикий (0.25x/2.3x)", font=("Segoe UI", 8, "bold"), bg=self.panel_color, fg="#fab387", bd=0, command=lambda: self.set_cs_range(0.25, 2.30)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
-        tk.Button(cs_presets_row, text="Экстрим (0.12x/3.2x)", font=("Segoe UI", 8, "bold"), bg=self.panel_color, fg=self.accent_on, bd=0, command=lambda: self.set_cs_range(0.12, 3.20)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
-
-        row_mosaic = tk.Frame(vis_frame, bg=self.panel_color)
-        row_mosaic.pack(fill=tk.X, pady=2)
-        tk.Label(row_mosaic, text="Эффект 144p (Мозаика):", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=26, anchor=tk.W).pack(side=tk.LEFT)
-        tk.Button(row_mosaic, text="144p РЕЖИМ 🔲", font=("Segoe UI", 9, "bold"), bg="#89dceb", fg="#11111b", bd=0, command=lambda: self.send_command("MOSAIC_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(row_mosaic, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("MOSAIC_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-
-        row_invert = tk.Frame(vis_frame, bg=self.panel_color)
-        row_invert.pack(fill=tk.X, pady=2)
-        tk.Label(row_invert, text="Инверсия цветов (Негатив):", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=26, anchor=tk.W).pack(side=tk.LEFT)
-        tk.Button(row_invert, text="НЕГАТИВ 🌗", font=("Segoe UI", 9, "bold"), bg="#f9e2af", fg="#11111b", bd=0, command=lambda: self.send_command("INVERT_COLORS_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(row_invert, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("INVERT_COLORS_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-
-        # Фаза 6: Гравитация нот (Падающие круги)
-        row_gravity = tk.Frame(vis_frame, bg=self.panel_color)
-        row_gravity.pack(fill=tk.X, pady=2)
-        tk.Label(row_gravity, text="Гравитация (Падающие ноты):", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=26, anchor=tk.W).pack(side=tk.LEFT)
-        tk.Button(row_gravity, text="ВКЛЮЧИТЬ 🧲", font=("Segoe UI", 9, "bold"), bg=self.accent_on, fg="#11111b", bd=0, command=lambda: self.send_command("GRAVITY_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(row_gravity, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("GRAVITY_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-
-        # --- СЕКЦИЯ: ТУННЕЛЬНОЕ ЗРЕНИЕ & НЕВИДИМЫЕ СЛАЙДЕРЫ (НОВОЕ В ФАЗЕ 4) ---
-        tunnel_frame = tk.Frame(tab2, bg=self.panel_color, padx=15, pady=12)
-        tunnel_frame.pack(fill=tk.X, pady=5)
-        self.tunnel_header = tk.Label(tunnel_frame, text="ТУННЕЛЬНОЕ ЗРЕНИЕ & НЕВИДИМЫЕ СЛАЙДЕРЫ", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.tunnel_header.pack(anchor=tk.W, pady=(0, 4))
-
-        row_tunnel = tk.Frame(tunnel_frame, bg=self.panel_color)
-        row_tunnel.pack(fill=tk.X, pady=2)
-        self.lbl_tunnel = tk.Label(row_tunnel, text="Туннельное зрение (Фонарик):", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=26, anchor=tk.W)
-        self.lbl_tunnel.pack(side=tk.LEFT)
-        tk.Button(row_tunnel, text="ВКЛЮЧИТЬ 🔦", font=("Segoe UI", 9, "bold"), bg=self.accent_cyan, fg="#11111b", bd=0, command=lambda: self.send_command("TUNNEL_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(row_tunnel, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("TUNNEL_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-
-        row_ghost = tk.Frame(tunnel_frame, bg=self.panel_color)
-        row_ghost.pack(fill=tk.X, pady=2)
-        self.lbl_ghost = tk.Label(row_ghost, text="Невидимка-слайдеры (Тела):", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=26, anchor=tk.W)
-        self.lbl_ghost.pack(side=tk.LEFT)
-        tk.Button(row_ghost, text="ВКЛЮЧИТЬ 👻", font=("Segoe UI", 9, "bold"), bg=self.accent_purple, fg="#11111b", bd=0, command=lambda: self.send_command("GHOST_SLIDERS_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(row_ghost, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("GHOST_SLIDERS_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-
-        # --- СЕКЦИЯ: ЗВУКОВЫЕ ЭФФЕКТЫ (AUDIO HAVOC) (ФАЗА 4 + ФАЗА 5) ---
-        audio_frame = tk.Frame(tab2, bg=self.panel_color, padx=15, pady=12)
-        audio_frame.pack(fill=tk.X, pady=5)
-        self.audio_header = tk.Label(audio_frame, text="ЗВУКОВЫЕ ЭФФЕКТЫ (AUDIO HAVOC)", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.audio_header.pack(anchor=tk.W, pady=(0, 4))
-
-        row_muffled = tk.Frame(audio_frame, bg=self.panel_color)
-        row_muffled.pack(fill=tk.X, pady=2)
-        self.lbl_muffled = tk.Label(row_muffled, text="Звук под водой (Low-Pass):", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=26, anchor=tk.W)
-        self.lbl_muffled.pack(side=tk.LEFT)
-        tk.Button(row_muffled, text="ПОД ВОДУ 🌊", font=("Segoe UI", 9, "bold"), bg=self.accent_blue, fg="#11111b", bd=0, command=lambda: self.send_command("MUFFLED_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(row_muffled, text="НОРМА", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("MUFFLED_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-
-        row_pan = tk.Frame(audio_frame, bg=self.panel_color)
-        row_pan.pack(fill=tk.X, pady=2)
-        self.lbl_pan = tk.Label(row_pan, text="8D Панорама (Вращение):", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=26, anchor=tk.W)
-        self.lbl_pan.pack(side=tk.LEFT)
-        tk.Button(row_pan, text="ВКЛЮЧИТЬ 8D 🎧", font=("Segoe UI", 9, "bold"), bg="#f5c2e7", fg="#11111b", bd=0, command=lambda: self.send_command("PAN_SPIN_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(row_pan, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("PAN_SPIN_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-
-        # Фаза 5: Остановка винила (Tape Stop) и Эхо в соборе (Reverb)
-        row_tape = tk.Frame(audio_frame, bg=self.panel_color)
-        row_tape.pack(fill=tk.X, pady=2)
-        tk.Button(row_tape, text="📼 ЗАЖЕВАЛО ПЛЕНКУ / ОСТАНОВКА ВИНИЛА (TAPE STOP) 🛑", font=("Segoe UI", 9, "bold"), bg="#fab387", fg="#11111b", bd=0, command=lambda: self.send_command("TAPE_STOP")).pack(fill=tk.X, expand=True, padx=2)
-
-        row_reverb = tk.Frame(audio_frame, bg=self.panel_color)
-        row_reverb.pack(fill=tk.X, pady=2)
-        self.lbl_reverb = tk.Label(row_reverb, text="Эхо в соборе (Reverb):", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=26, anchor=tk.W)
-        self.lbl_reverb.pack(side=tk.LEFT)
-        tk.Button(row_reverb, text="ВКЛЮЧИТЬ ЭХО ⛪", font=("Segoe UI", 9, "bold"), bg="#cba6f7", fg="#11111b", bd=0, command=lambda: self.send_command("REVERB_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(row_reverb, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("REVERB_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-
-        # Фаза 6: Bass Boost / Ear Rape (Переключаемый)
-        row_bass = tk.Frame(audio_frame, bg=self.panel_color)
-        row_bass.pack(fill=tk.X, pady=2)
-        self.lbl_bass = tk.Label(row_bass, text="Bass Boost / Ear Rape:", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=26, anchor=tk.W)
-        self.lbl_bass.pack(side=tk.LEFT)
-        tk.Button(row_bass, text="ВКЛЮЧИТЬ БАС 📢", font=("Segoe UI", 9, "bold"), bg=self.accent_on, fg="#11111b", bd=0, command=lambda: self.send_command("BASS_BOOST_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(row_bass, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("BASS_BOOST_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-
-        # --- СЕКЦИЯ: ЗЕМЛЕТРЯСЕНИЕ (СЛАЙДЕР СИЛЫ) ---
-        earth_frame = tk.Frame(tab2, bg=self.panel_color, padx=15, pady=10)
-        earth_frame.pack(fill=tk.X, pady=5)
-        self.earth_header = tk.Label(earth_frame, text="ЗЕМЛЕТРЯСЕНИЕ ИНТЕРФЕЙСА (ВЫКЛЮЧЕН 🔴)", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.earth_header.pack(anchor=tk.W, pady=(0, 5))
-        
-        btn_frame4 = tk.Frame(earth_frame, bg=self.panel_color)
-        btn_frame4.pack(fill=tk.X)
-        tk.Button(btn_frame4, text="ВКЛЮЧИТЬ", font=("Segoe UI", 10, "bold"), bg=self.accent_earth, fg="#11111b", bd=0, command=lambda: self.send_command("EARTHQUAKE_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_frame4, text="ВЫКЛЮЧИТЬ", font=("Segoe UI", 10, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("EARTHQUAKE_OFF")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
-        
-        tk.Label(earth_frame, text="Магнитуда землетрясения:", font=("Segoe UI", 9), bg=self.panel_color, fg=self.text_color).pack(anchor=tk.W, pady=(5, 0))
-        self.earth_slider = ttk.Scale(earth_frame, from_=0.0, to=3.0, orient=tk.HORIZONTAL, command=lambda val: self.send_command(f"EARTHQUAKE_STRENGTH:{float(val):.2f}"))
-        self.earth_slider.set(1.0)
-        self.earth_slider.pack(fill=tk.X)
-
-        # --- СЕКЦИЯ: СЛЕПОТА (Hidden) ---
-        hidden_frame = tk.Frame(tab2, bg=self.panel_color, padx=15, pady=10)
-        hidden_frame.pack(fill=tk.X, pady=5)
-        self.hidden_header = tk.Label(hidden_frame, text="СЛЕПОТА (Hidden) (ВЫКЛЮЧЕН 🔴)", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.hidden_header.pack(anchor=tk.W, pady=(0, 5))
-        
-        btn_frame_hidden = tk.Frame(hidden_frame, bg=self.panel_color)
-        btn_frame_hidden.pack(fill=tk.X)
-        tk.Button(btn_frame_hidden, text="ВКЛЮЧИТЬ", font=("Segoe UI", 10, "bold"), bg=self.accent_on, fg="#11111b", bd=0, command=lambda: self.send_command("HIDDEN_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_frame_hidden, text="ВЫКЛЮЧИТЬ", font=("Segoe UI", 10, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("HIDDEN_OFF")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
-
-        # --- СЕКЦИЯ: ОТЗЕРКАЛИВАНИЕ ---
-        mirror_frame = tk.Frame(tab2, bg=self.panel_color, padx=15, pady=10)
-        mirror_frame.pack(fill=tk.X, pady=5)
-        self.mirror_header = tk.Label(mirror_frame, text="ОТЗЕРКАЛИВАНИЕ", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.mirror_header.pack(anchor=tk.W, pady=(0, 5))
-        
-        btn_frame_mirror_x = tk.Frame(mirror_frame, bg=self.panel_color)
-        btn_frame_mirror_x.pack(fill=tk.X, pady=2)
-        tk.Button(btn_frame_mirror_x, text="ПОЛЕ ОСЬ X 🔛", font=("Segoe UI", 9, "bold"), bg=self.accent_earth, fg="#11111b", bd=0, command=lambda: self.send_command("MIRROR_PLAYFIELD_X_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_frame_mirror_x, text="СБРОС ПОЛЯ X", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("MIRROR_PLAYFIELD_X_OFF")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
-
-        btn_frame_mirror_y = tk.Frame(mirror_frame, bg=self.panel_color)
-        btn_frame_mirror_y.pack(fill=tk.X, pady=2)
-        tk.Button(btn_frame_mirror_y, text="ПОЛЕ ОСЬ Y ↕️", font=("Segoe UI", 9, "bold"), bg=self.accent_earth, fg="#11111b", bd=0, command=lambda: self.send_command("MIRROR_PLAYFIELD_Y_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_frame_mirror_y, text="СБРОС ПОЛЯ Y", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("MIRROR_PLAYFIELD_Y_OFF")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
-
-        btn_frame_mirror_hud = tk.Frame(mirror_frame, bg=self.panel_color)
-        btn_frame_mirror_hud.pack(fill=tk.X, pady=2)
-        tk.Button(btn_frame_mirror_hud, text="HUD ОСЬ X 🔛", font=("Segoe UI", 9, "bold"), bg=self.accent_blue, fg="#11111b", bd=0, command=lambda: self.send_command("MIRROR_HUD_X_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_frame_mirror_hud, text="СБРОС HUD X", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("MIRROR_HUD_X_OFF")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
-
-        # --- СЕКЦИЯ: ИСКАЖЕНИЕ (Масштаб) ---
-        scale_frame = tk.Frame(tab2, bg=self.panel_color, padx=15, pady=10)
-        scale_frame.pack(fill=tk.X, pady=5)
-        self.scale_header = tk.Label(scale_frame, text="ИСКАЖЕНИЕ МАСШТАБА", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.scale_header.pack(anchor=tk.W, pady=(0, 5))
-        
-        tk.Label(scale_frame, text="Игровое поле (Общий масштаб):", font=("Segoe UI", 9), bg=self.panel_color, fg=self.text_color).pack(anchor=tk.W)
-        row1 = tk.Frame(scale_frame, bg=self.panel_color)
-        row1.pack(fill=tk.X, pady=(0, 5))
-        self.scale_slider = ttk.Scale(row1, from_=0.1, to=2.0, orient=tk.HORIZONTAL, command=lambda val: self.send_command(f"SCALE:{float(val):.2f}"))
-        self.scale_slider.set(1.0)
-        self.scale_slider.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        tk.Button(row1, text="⟲", font=("Segoe UI", 12), bg=self.panel_color, fg=self.accent_blue, bd=0, cursor="hand2", command=lambda: self.scale_slider.set(1.0)).pack(side=tk.RIGHT, padx=(5, 0))
-
-        tk.Label(scale_frame, text="Интерфейс (HUD) (Общий масштаб):", font=("Segoe UI", 9), bg=self.panel_color, fg=self.text_color).pack(anchor=tk.W)
-        row2 = tk.Frame(scale_frame, bg=self.panel_color)
-        row2.pack(fill=tk.X, pady=(0, 5))
-        self.hud_scale_slider = ttk.Scale(row2, from_=0.1, to=2.0, orient=tk.HORIZONTAL, command=lambda val: self.send_command(f"HUD_SCALE:{float(val):.2f}"))
-        self.hud_scale_slider.set(1.0)
-        self.hud_scale_slider.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        tk.Button(row2, text="⟲", font=("Segoe UI", 12), bg=self.panel_color, fg=self.accent_blue, bd=0, cursor="hand2", command=lambda: self.hud_scale_slider.set(1.0)).pack(side=tk.RIGHT, padx=(5, 0))
-
-        # --- СЕКЦИЯ: УСКОРЕНИЕ ВРЕМЕНИ (Speed Rate) ---
-        speed_frame = tk.Frame(tab2, bg=self.panel_color, padx=15, pady=10)
-        speed_frame.pack(fill=tk.X, pady=5)
-        self.speed_header = tk.Label(speed_frame, text="СКОРОСТЬ ИГРЫ (Time Rate)", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.speed_header.pack(anchor=tk.W, pady=(0, 5))
-        
-        tk.Label(speed_frame, text="Множитель скорости:", font=("Segoe UI", 9), bg=self.panel_color, fg=self.text_color).pack(anchor=tk.W)
-        row_speed = tk.Frame(speed_frame, bg=self.panel_color)
-        row_speed.pack(fill=tk.X, pady=(0, 5))
-        self.speed_slider = ttk.Scale(row_speed, from_=0.1, to=2.5, orient=tk.HORIZONTAL, command=lambda val: self.send_command(f"SPEED:{float(val):.2f}"))
-        self.speed_slider.set(1.0)
-        self.speed_slider.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        tk.Button(row_speed, text="⟲", font=("Segoe UI", 12), bg=self.panel_color, fg=self.accent_blue, bd=0, cursor="hand2", command=lambda: self.speed_slider.set(1.0)).pack(side=tk.RIGHT, padx=(5, 0))
 
+        self.root.bind_all("<MouseWheel>", _on_mousewheel)
+
+        self.populate_tab_gameplay(self.tab1)
+        self.populate_tab_cursor(self.tab_cursor)
+        self.populate_tab_distortions(self.tab2)
+        self.populate_tab_pranks(self.tab3)
+        self.populate_tab_radar(self.tab4)
+
+    def _create_scrollable_tab(self, notebook, title):
+        outer = ttk.Frame(notebook)
+        notebook.add(outer, text=title)
+
+        canvas = tk.Canvas(outer, bg=self.bg_color, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+        inner = tk.Frame(canvas, bg=self.bg_color)
+
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+
+        window_id = canvas.create_window((0, 0), window=inner, anchor="nw")
+
+        def _on_canvas_configure(e):
+            canvas.itemconfig(window_id, width=e.width)
+
+        def _on_inner_configure(e):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        canvas.bind("<Configure>", _on_canvas_configure)
+        inner.bind("<Configure>", _on_inner_configure)
+
+        return inner, canvas
+
+    def create_card(self, parent, title: str, subtitle: str = None, accent_color: str = None):
+        if accent_color is None:
+            accent_color = self.accent_blue
+
+        frame = tk.Frame(
+            parent,
+            bg=self.card_color,
+            highlightthickness=1,
+            highlightbackground=self.border_color,
+            padx=14,
+            pady=10
+        )
+        frame.pack(fill=tk.X, pady=4)
+
+        header_row = tk.Frame(frame, bg=self.card_color)
+        header_row.pack(fill=tk.X, pady=(0, 2))
+
+        title_lbl = tk.Label(
+            header_row,
+            text=title,
+            font=("Segoe UI", 10, "bold"),
+            bg=self.card_color,
+            fg=self.text_color
+        )
+        title_lbl.pack(side=tk.LEFT)
+
+        if subtitle:
+            sub_lbl = tk.Label(
+                frame,
+                text=subtitle,
+                font=("Segoe UI", 8),
+                bg=self.card_color,
+                fg=self.text_dim,
+                wraplength=480,
+                justify=tk.LEFT
+            )
+            sub_lbl.pack(anchor=tk.W, pady=(0, 6))
+
+        return frame, title_lbl
+
+    def create_toggle_card(self, parent, key: str, title: str, subtitle: str, on_cmd: str, off_cmd: str, accent_color: str = None):
+        if accent_color is None:
+            accent_color = self.accent_green
+
+        card, title_lbl = self.create_card(parent, title, subtitle, accent_color)
+
+        btn_row = tk.Frame(card, bg=self.card_color)
+        btn_row.pack(fill=tk.X, pady=(2, 0))
+
+        status_badge = tk.Label(
+            btn_row,
+            text="⚪ ВЫКЛЮЧЕНО",
+            font=("Segoe UI", 8, "bold"),
+            bg=self.surface1,
+            fg=self.text_dim,
+            padx=8,
+            pady=3
+        )
+        status_badge.pack(side=tk.LEFT, padx=(0, 8))
+
+        toggle_btn = tk.Button(
+            btn_row,
+            text="ВКЛЮЧИТЬ ▶",
+            font=("Segoe UI", 9, "bold"),
+            bg=self.panel_color,
+            fg=self.text_color,
+            activebackground=accent_color,
+            activeforeground=self.accent_dark,
+            bd=0,
+            padx=12,
+            pady=3,
+            cursor="hand2"
+        )
+        toggle_btn.pack(side=tk.RIGHT, fill=tk.X, expand=True)
+
+        def _on_click():
+            is_active = self.toggle_states.get(key, False)
+            new_state = not is_active
+            cmd = on_cmd if new_state else off_cmd
+            self.send_command(cmd)
+
+        toggle_btn.config(command=_on_click)
+
+        self.toggle_widgets[key] = {
+            "btn": toggle_btn,
+            "badge": status_badge,
+            "title": title_lbl,
+            "accent": accent_color,
+            "base_title": title,
+            "on_cmd": on_cmd,
+            "off_cmd": off_cmd
+        }
+
+        return card
+
+    def update_toggle_visual(self, key: str, is_on: bool):
+        self.toggle_states[key] = is_on
+        w = self.toggle_widgets.get(key)
+        if not w:
+            return
+
+        accent = w["accent"]
+        if is_on:
+            if w.get("badge"):
+                w["badge"].config(text="🟢 АКТИВЕН", bg=accent, fg=self.accent_dark)
+            if w.get("btn"):
+                if w.get("badge") is not None:
+                    w["btn"].config(text="ВЫКЛЮЧИТЬ ⏹️", bg=self.accent_red, fg=self.accent_dark)
+                else:
+                    base_txt = w.get("base_text", "")
+                    w["btn"].config(text=f"🟢 {base_txt}", bg=accent, fg=self.accent_dark)
+            if w.get("title"):
+                w["title"].config(fg=accent)
+        else:
+            if w.get("badge"):
+                w["badge"].config(text="⚪ ВЫКЛЮЧЕНО", bg=self.surface1, fg=self.text_dim)
+            if w.get("btn"):
+                if w.get("badge") is not None:
+                    w["btn"].config(text="ВКЛЮЧИТЬ ▶", bg=self.panel_color, fg=self.text_color)
+                else:
+                    base_txt = w.get("base_text", "")
+                    w["btn"].config(text=f"⚪ {base_txt}", bg=self.surface1, fg=self.text_color)
+            if w.get("title"):
+                w["title"].config(fg=self.text_color)
+
+    def create_slider_row(self, parent, label: str, from_val: float, to_val: float, default_val: float, format_str: str, on_change, reset_cmd: str = None):
+        row = tk.Frame(parent, bg=self.card_color)
+        row.pack(fill=tk.X, pady=(4, 2))
+
+        top_info = tk.Frame(row, bg=self.card_color)
+        top_info.pack(fill=tk.X, pady=(0, 2))
+
+        lbl = tk.Label(top_info, text=label, font=("Segoe UI", 9), bg=self.card_color, fg=self.text_color)
+        lbl.pack(side=tk.LEFT)
+
+        initial_txt = format_str.format(int(round(default_val))) if "d" in format_str else format_str.format(default_val)
+        val_badge = tk.Label(
+            top_info,
+            text=initial_txt,
+            font=("Segoe UI", 9, "bold"),
+            bg=self.surface1,
+            fg=self.accent_yellow,
+            padx=6,
+            pady=1
+        )
+        val_badge.pack(side=tk.RIGHT)
+
+        slider_frame = tk.Frame(row, bg=self.card_color)
+        slider_frame.pack(fill=tk.X)
+
+        scale = ttk.Scale(slider_frame, from_=from_val, to=to_val, orient=tk.HORIZONTAL)
+        scale.set(default_val)
+        scale.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
+
+        def _on_move(val):
+            num = float(val)
+            if "d" in format_str:
+                val_badge.config(text=format_str.format(int(round(num))))
+            else:
+                val_badge.config(text=format_str.format(num))
+            on_change(num)
+
+        scale.config(command=_on_move)
+
+        def _reset():
+            scale.set(default_val)
+            if "d" in format_str:
+                val_badge.config(text=format_str.format(int(round(default_val))))
+            else:
+                val_badge.config(text=format_str.format(default_val))
+            if reset_cmd:
+                self.send_command(reset_cmd)
+            else:
+                on_change(default_val)
+
+        reset_btn = tk.Button(
+            slider_frame,
+            text="⟲",
+            font=("Segoe UI", 10),
+            bg=self.surface1,
+            fg=self.accent_blue,
+            activebackground=self.accent_blue,
+            activeforeground=self.accent_dark,
+            bd=0,
+            padx=6,
+            pady=0,
+            cursor="hand2",
+            command=_reset
+        )
+        reset_btn.pack(side=tk.RIGHT)
+
+        return scale, val_badge
+
+    # =========================================================================
+    # ВКЛАДКА 1: ГЕЙМПЛЕЙ (Хаос, Ветер, Магнит, Черная Дыра, Скорость, Гравитация)
+    # =========================================================================
+    def populate_tab_gameplay(self, tab):
+        card1 = self.create_toggle_card(
+            tab, "CHAOS", "1. ХАОС НОТ (РАЗБРОС)",
+            "Случайное орбитальное смещение всех нот по синусоиде",
+            "CHAOS_ON", "CHAOS_OFF", self.accent_peach
+        )
+        self.create_slider_row(
+            card1, "Сила хаоса:", 0.0, 2.0, 1.0, "{:.2f}x",
+            lambda v: self.send_command(f"STRENGTH:{v:.2f}")
+        )
+
+        card2 = self.create_toggle_card(
+            tab, "WIND", "2. ВЕТЕР НА ИГРОВОМ ПОЛЕ",
+            "Непрерывный поток ветра, сносящий круги в заданном направлении",
+            "WIND_ON", "WIND_OFF", self.accent_blue
+        )
+        self.create_slider_row(
+            card2, "Сила ветра:", 0.0, 3.0, 1.0, "{:.2f}x",
+            lambda v: self.send_command(f"WIND_STRENGTH:{v:.2f}")
+        )
+        self.create_slider_row(
+            card2, "Направление (Градусы):", 0.0, 360.0, 0.0, "{:.0f}°",
+            lambda v: self.send_command(f"WIND_DIR:{v:.2f}")
+        )
+
+        card3 = self.create_toggle_card(
+            tab, "MAGNET", "3. МАГНИТНОЕ ОТТАЛКИВАНИЕ НОТ",
+            "Ноты физически отталкиваются от курсора игрока при приближении",
+            "MAGNET_ON", "MAGNET_OFF", self.accent_yellow
+        )
+        self.create_slider_row(
+            card3, "Сила отталкивания:", 0.0, 3.0, 1.0, "{:.2f}x",
+            lambda v: self.send_command(f"MAGNET_STRENGTH:{v:.2f}")
+        )
+
+        card4 = self.create_toggle_card(
+            tab, "BLACK_HOLE", "4. ЧЁРНАЯ ДЫРА (ГРАВИТАЦИЯ В ЦЕНТР)",
+            "Затягивает все объекты карты в сингулярность (256, 192)",
+            "BLACK_HOLE_ON", "BLACK_HOLE_OFF", self.accent_mauve
+        )
+        self.bh_scale, self.bh_badge = self.create_slider_row(
+            card4, "Сила гравитации:", 0.0, 4.0, 1.0, "{:.2f}x",
+            lambda v: self.send_command(f"BLACK_HOLE_STRENGTH:{v:.2f}")
+        )
+
+        p_row = tk.Frame(card4, bg=self.card_color)
+        p_row.pack(fill=tk.X, pady=(4, 0))
+        for txt, val in [("0.5x", 0.5), ("1.0x", 1.0), ("2.0x", 2.0), ("4.0x Сингулярность", 4.0)]:
+            tk.Button(
+                p_row, text=txt, font=("Segoe UI", 8, "bold"),
+                bg=self.surface1, fg=self.text_color, activebackground=self.accent_mauve,
+                activeforeground=self.accent_dark, bd=0, padx=6, pady=2, cursor="hand2",
+                command=lambda v=val: [self.bh_scale.set(v), self.bh_badge.config(text=f"{v:.2f}x"), self.send_command(f"BLACK_HOLE_STRENGTH:{v:.2f}")]
+            ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+
+        self.create_toggle_card(
+            tab, "GRAVITY", "5. ГРАВИТАЦИЯ (ПАДАЮЩИЕ НОТЫ)",
+            "Ноты падают вниз под силой тяжести после появления",
+            "GRAVITY_ON", "GRAVITY_OFF", self.accent_peach
+        )
+
+        card_speed, _ = self.create_card(tab, "6. СКОРОСТЬ ИГРЫ (TIME RATE)", "Ускорение или замедление воспроизведения карты", self.accent_cyan)
+        self.create_slider_row(
+            card_speed, "Множитель скорости:", 0.1, 2.5, 1.0, "{:.2f}x",
+            lambda v: self.send_command(f"SPEED:{v:.2f}"), "SPEED:1.00"
+        )
         self.pitch_var = tk.IntVar()
-        self.pitch_checkbox = tk.Checkbutton(speed_frame, text="Эффект бурундука (изменять тональность)", variable=self.pitch_var, bg=self.panel_color, fg=self.text_color, selectcolor=self.bg_color, activebackground=self.panel_color, activeforeground=self.text_color, command=lambda: self.send_command("PITCH_ON" if self.pitch_var.get() else "PITCH_OFF"))
-        self.pitch_checkbox.pack(anchor=tk.W, pady=(5,0))
+        chk_pitch = tk.Checkbutton(
+            card_speed,
+            text="Эффект бурундука (изменять тональность при смене скорости)",
+            variable=self.pitch_var,
+            font=("Segoe UI", 8),
+            bg=self.card_color,
+            fg=self.text_color,
+            selectcolor=self.bg_color,
+            activebackground=self.card_color,
+            activeforeground=self.text_color,
+            command=lambda: self.send_command("PITCH_ON" if self.pitch_var.get() else "PITCH_OFF")
+        )
+        chk_pitch.pack(anchor=tk.W, pady=(4, 0))
 
-        # --- СЕКЦИЯ: РАССИНХРОН ЗВУКА (Audio Desync) ---
-        desync_frame = tk.Frame(tab2, bg=self.panel_color, padx=15, pady=10)
-        desync_frame.pack(fill=tk.X, pady=5)
-        self.desync_header = tk.Label(desync_frame, text="РАССИНХРОН ЗВУКА (0 ms 🔴)", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.desync_header.pack(anchor=tk.W, pady=(0, 5))
-        tk.Label(desync_frame, text="Сдвигает аудио относительно карты. Ломает чувство ритма!", font=("Segoe UI", 9), bg=self.panel_color, fg="#a6adc8").pack(anchor=tk.W, pady=(0, 8))
+        card_scale, _ = self.create_card(tab, "7. МАСШТАБИРОВАНИЕ", "Искажение размера игрового поля и элементов интерфейса", self.accent_blue)
+        self.create_slider_row(
+            card_scale, "Игровое поле (Playfield):", 0.1, 2.0, 1.0, "{:.2f}x",
+            lambda v: self.send_command(f"SCALE:{v:.2f}"), "SCALE:1.00"
+        )
+        self.create_slider_row(
+            card_scale, "Интерфейс (HUD):", 0.1, 2.0, 1.0, "{:.2f}x",
+            lambda v: self.send_command(f"HUD_SCALE:{v:.2f}"), "HUD_SCALE:1.00"
+        )
 
-        btn_desync_row1 = tk.Frame(desync_frame, bg=self.panel_color)
-        btn_desync_row1.pack(fill=tk.X, pady=2)
-        tk.Button(btn_desync_row1, text="-150 ms (Спешит)", font=("Segoe UI", 8, "bold"), bg=self.accent_on, fg="#11111b", bd=0, command=lambda: self.set_audio_desync(-150)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_desync_row1, text="-75 ms", font=("Segoe UI", 8, "bold"), bg=self.accent_yellow, fg="#11111b", bd=0, command=lambda: self.set_audio_desync(-75)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_desync_row1, text="0 ms (Синхрон)", font=("Segoe UI", 8, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.set_audio_desync(0)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_desync_row1, text="+75 ms", font=("Segoe UI", 8, "bold"), bg=self.accent_yellow, fg="#11111b", bd=0, command=lambda: self.set_audio_desync(75)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_desync_row1, text="+150 ms (Отстает)", font=("Segoe UI", 8, "bold"), bg=self.accent_on, fg="#11111b", bd=0, command=lambda: self.set_audio_desync(150)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+    # =========================================================================
+    # ВКЛАДКА 2: КУРСОР & ВВОД (Физика, Дрожание, Лаг, Мышь, Инверсия, Клавиши)
+    # =========================================================================
+    def populate_tab_cursor(self, tab):
+        card_spin, _ = self.create_card(
+            tab, "1. СРЫВ СЕНСОРА МЫШИ 🌪️",
+            "Курсор за 80 мс срывается в угол с высокочастотным джиттером и звуком сбоя",
+            self.accent_peach
+        )
+        btn_spin = tk.Button(
+            card_spin,
+            text="🌪️ СОРВАТЬ СЕНСОР МЫШИ В УГОЛ 🖱️",
+            font=("Segoe UI", 10, "bold"),
+            bg=self.accent_peach,
+            fg=self.accent_dark,
+            activebackground=self.accent_yellow,
+            activeforeground=self.accent_dark,
+            bd=0,
+            padx=12,
+            pady=6,
+            cursor="hand2",
+            command=lambda: self.send_command("TROLL:SPINOUT")
+        )
+        btn_spin.pack(fill=tk.X, pady=2)
 
-        row_desync_slider = tk.Frame(desync_frame, bg=self.panel_color)
-        row_desync_slider.pack(fill=tk.X, pady=(6, 0))
-        self.desync_slider = ttk.Scale(row_desync_slider, from_=-300, to=300, orient=tk.HORIZONTAL, command=self.on_desync_slider_change)
-        self.desync_slider.set(0)
-        self.desync_slider.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        tk.Button(row_desync_slider, text="⟲", font=("Segoe UI", 12), bg=self.panel_color, fg=self.accent_blue, bd=0, cursor="hand2", command=lambda: self.set_audio_desync(0)).pack(side=tk.RIGHT, padx=(5, 0))
+        self.create_toggle_card(
+            tab, "REPULSION", "2. ОТТАЛКИВАНИЕ КУРСОРА ОТ НОТ 🧲",
+            "Курсор физически смещается в сторону при наведении на хит-серклы",
+            "REPULSION_ON", "REPULSION_OFF", self.accent_yellow
+        )
 
-        # --- СЕКЦИЯ: ХАМЕЛЕОН (ПОДМЕНА НОТ И ЦВЕТОВ) ---
-        cham_frame = tk.Frame(tab2, bg=self.panel_color, padx=15, pady=10)
-        cham_frame.pack(fill=tk.X, pady=5)
-        self.cham_header = tk.Label(cham_frame, text="ХАМЕЛЕОН (ОБЫЧНЫЕ ЦВЕТА 🔴)", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.cham_header.pack(anchor=tk.W, pady=(0, 5))
+        card_jit, _ = self.create_card(
+            tab, "3. ТРЯСУЩИЕСЯ РУКИ (ДЖИТТЕР КУРСОРА)",
+            "Высокочастотная вибрация курсора (эффект дрожания рук от адреналина)",
+            self.accent_mauve
+        )
+        self.jit_scale, self.jit_badge = self.create_slider_row(
+            card_jit, "Амплитуда джиттера:", 0, 50, 0, "{:.0f} px",
+            lambda v: self.send_command(f"JITTER:{int(v)}"), "JITTER:0"
+        )
+        j_presets = tk.Frame(card_jit, bg=self.card_color)
+        j_presets.pack(fill=tk.X, pady=(4, 0))
+        for txt, val, col in [("0 px (Выкл)", 0, self.surface1), ("8 px", 8, self.surface1), ("18 px", 18, self.accent_yellow), ("35 px (Паника)", 35, self.accent_red)]:
+            tk.Button(
+                j_presets, text=txt, font=("Segoe UI", 8, "bold"),
+                bg=col if col != self.surface1 else self.surface1,
+                fg=self.accent_dark if col != self.surface1 else self.text_color,
+                bd=0, padx=6, pady=2, cursor="hand2",
+                command=lambda v=val: [self.jit_scale.set(v), self.jit_badge.config(text=f"{v} px"), self.send_command(f"JITTER:{v}")]
+            ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
 
-        btn_cham_row = tk.Frame(cham_frame, bg=self.panel_color)
-        btn_cham_row.pack(fill=tk.X, pady=2)
-        tk.Button(btn_cham_row, text="ОБЫЧНЫЕ (ВЫКЛ)", font=("Segoe UI", 8, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("CHAMELEON_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_cham_row, text="ЧЕРНЫЕ (Стелс 🥷)", font=("Segoe UI", 8, "bold"), bg="#11111b", fg="#cdd6f4", bd=0, command=lambda: self.send_command("CHAMELEON_BLACK")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_cham_row, text="РАДУГА (Диско 🌈)", font=("Segoe UI", 8, "bold"), bg="#f5c2e7", fg="#11111b", bd=0, command=lambda: self.send_command("CHAMELEON_RAINBOW")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_cham_row, text="МОНОХРОМ (⚪)", font=("Segoe UI", 8, "bold"), bg="#a6adc8", fg="#11111b", bd=0, command=lambda: self.send_command("CHAMELEON_MONO")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        card_lag, _ = self.create_card(
+            tab, "4. ИНПУТ-ЛАГ (ЗАДЕРЖКА КООРДИНАТ)",
+            "Физически задерживает координаты и клики. Полностью ломает мышечную память!",
+            self.accent_red
+        )
+        self.lag_scale, self.lag_badge = self.create_slider_row(
+            card_lag, "Задержка ввода:", 0, 500, 0, "{:.0f} ms",
+            lambda v: self.send_command(f"INPUT_LAG:{int(v)}"), "INPUT_LAG:0"
+        )
+        l_presets = tk.Frame(card_lag, bg=self.card_color)
+        l_presets.pack(fill=tk.X, pady=(4, 0))
+        for txt, val, col in [("Выкл", 0, self.surface1), ("50 ms", 50, self.surface1), ("100 ms", 100, self.surface1), ("200 ms", 200, self.accent_yellow), ("300 ms", 300, self.accent_peach), ("500 ms (Ад)", 500, self.accent_red)]:
+            tk.Button(
+                l_presets, text=txt, font=("Segoe UI", 8, "bold"),
+                bg=col if col != self.surface1 else self.surface1,
+                fg=self.accent_dark if col != self.surface1 else self.text_color,
+                bd=0, padx=4, pady=2, cursor="hand2",
+                command=lambda v=val: [self.lag_scale.set(v), self.lag_badge.config(text=f"{v} ms"), self.send_command(f"INPUT_LAG:{v}")]
+            ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
 
-        # ==========================================
-        # Вкладка 4: ИВЕНТЫ & СИСТЕМНЫЙ ТРОЛЛИНГ
-        # ==========================================
+        card_clones = self.create_toggle_card(
+            tab, "CLONES", "5. АРМИЯ КЛОНОВ (10 КУРСОРОВ) 👥",
+            "Создает 10 курсоров-обманок, копирующих клики и траекторию игрока",
+            "CLONES_ON", "CLONES_OFF", self.accent_pink
+        )
+        fc_row = tk.Frame(card_clones, bg=self.card_color)
+        fc_row.pack(fill=tk.X, pady=(6, 0))
+        for txt, cmd in [("Зеркало X", "FAKE_CURSORS:MIRROR_X"), ("Зеркало Y", "FAKE_CURSORS:MIRROR_Y"), ("X+Y", "FAKE_CURSORS:MIRROR_XY"), ("Рой (Swarm)", "FAKE_CURSORS:SWARM")]:
+            tk.Button(
+                fc_row, text=txt, font=("Segoe UI", 8, "bold"),
+                bg=self.surface1, fg=self.text_color, activebackground=self.accent_blue,
+                activeforeground=self.accent_dark, bd=0, padx=6, pady=2, cursor="hand2",
+                command=lambda c=cmd: self.send_command(c)
+            ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
 
-        # --- СЕКЦИЯ: БЛЭКАУТ (Остановка времени) ---
-        blackout_frame = tk.Frame(tab3, bg=self.panel_color, padx=15, pady=10)
-        blackout_frame.pack(fill=tk.X, pady=5)
-        self.blackout_header = tk.Label(blackout_frame, text="5. БЛЭКАУТ (ВЫКЛЮЧЕН 🔴)", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.blackout_header.pack(anchor=tk.W, pady=(0, 5))
-        
-        btn_frame5 = tk.Frame(blackout_frame, bg=self.panel_color)
-        btn_frame5.pack(fill=tk.X)
-        tk.Button(btn_frame5, text="ОСТАНОВИТЬ ВРЕМЯ", font=("Segoe UI", 10, "bold"), bg=self.accent_blackout, fg="#11111b", bd=0, command=lambda: self.send_command("FREEZE_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_frame5, text="ВОССТАНОВИТЬ", font=("Segoe UI", 10, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("FREEZE_OFF")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
+        self.create_toggle_card(
+            tab, "HIDE_CURSOR", "6. НЕВИДИМЫЙ КУРСОР 👻",
+            "Скрывает спрайт курсора, оставляя только хвостовой след",
+            "HIDE_CURSOR:ON", "HIDE_CURSOR:OFF", self.accent_red
+        )
 
-        # --- СЕКЦИЯ: ВНЕЗАПНЫЕ ИВЕНТЫ ---
-        screamer_frame = tk.Frame(tab3, bg=self.panel_color, padx=15, pady=10)
-        screamer_frame.pack(fill=tk.X, pady=5)
-        self.screamer_header = tk.Label(screamer_frame, text="6. ВНЕЗАПНЫЕ ИВЕНТЫ 🎭", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.screamer_header.pack(anchor=tk.W, pady=(0, 5))
-        
-        btn_frame6 = tk.Frame(screamer_frame, bg=self.panel_color)
-        btn_frame6.pack(fill=tk.X, pady=(0, 5))
-        tk.Button(btn_frame6, text="ПОЦЕЛУЙ 💋", font=("Segoe UI", 10, "bold"), bg="#ff7eb3", fg="#11111b", bd=0, command=lambda: self.send_command("KISS")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(btn_frame6, text="ФЕЙКОВЫЙ МИСС ❌", font=("Segoe UI", 10, "bold"), bg="#f38ba8", fg="#11111b", bd=0, command=lambda: self.send_command("FAKE_MISS")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
-        
-        btn_frame_flash = tk.Frame(screamer_frame, bg=self.panel_color)
-        btn_frame_flash.pack(fill=tk.X)
-        tk.Button(btn_frame_flash, text="FLASHBANG 💥", font=("Segoe UI", 10, "bold"), bg="#ffffff", fg="#11111b", bd=0, command=lambda: self.send_command("FLASHBANG")).pack(fill=tk.X, expand=True, padx=2)
+        self.create_toggle_card(
+            tab, "BUSY_CURSOR", "7. КОЛЁСИКО ЗАГРУЗКИ (BUSY CURSOR) ⏳",
+            "Вращающийся системный спиннер Windows прямо на кончике курсора",
+            "BUSY_CURSOR_ON", "BUSY_CURSOR_OFF", self.accent_cyan
+        )
 
-        # --- СЕКЦИЯ: ТРОЛЛИНГ И СИСТЕМНЫЕ СБОИ (ФАЗА 3 + ФАЗА 4) ---
-        troll_frame = tk.Frame(tab3, bg=self.panel_color, padx=15, pady=12)
-        troll_frame.pack(fill=tk.X, pady=5)
-        self.troll_header = tk.Label(troll_frame, text="7. СИСТЕМНЫЙ ТРОЛЛИНГ & ОБМАНКИ 🪟", font=("Segoe UI", 11, "bold"), bg=self.panel_color, fg=self.text_color)
-        self.troll_header.pack(anchor=tk.W, pady=(0, 4))
-        tk.Label(troll_frame, text="Окна Windows, звуки железа, сбои мыши и донаты со звуком", font=("Segoe UI", 9), bg=self.panel_color, fg="#a6adc8").pack(anchor=tk.W, pady=(0, 8))
+        card_cscale, _ = self.create_card(tab, "8. РАЗМЕР КУРСОРА", "Масштабирование спрайта курсора игрока", self.accent_yellow)
+        self.cscale_slider, self.cscale_badge = self.create_slider_row(
+            card_cscale, "Масштаб:", 0.1, 5.0, 1.0, "{:.2f}x",
+            lambda v: self.send_command(f"CURSOR_SCALE:{v:.2f}"), "CURSOR_SCALE:1.00"
+        )
+        cs_presets = tk.Frame(card_cscale, bg=self.card_color)
+        cs_presets.pack(fill=tk.X, pady=(4, 0))
+        for txt, val in [("0.2x Микро", 0.2), ("0.5x", 0.5), ("1.0x Норма", 1.0), ("2.0x", 2.0), ("4.0x Гигант", 4.0)]:
+            tk.Button(
+                cs_presets, text=txt, font=("Segoe UI", 8, "bold"),
+                bg=self.surface1, fg=self.text_color, activebackground=self.accent_yellow,
+                activeforeground=self.accent_dark, bd=0, padx=4, pady=2, cursor="hand2",
+                command=lambda v=val: [self.cscale_slider.set(v), self.cscale_badge.config(text=f"{v:.2f}x"), self.send_command(f"CURSOR_SCALE:{v:.2f}")]
+            ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
 
-        # Ряд 1: Отключение мыши (Фаза 4)
-        row_disconnect = tk.Frame(troll_frame, bg=self.panel_color)
-        row_disconnect.pack(fill=tk.X, pady=2)
-        tk.Button(row_disconnect, text="🔌 ОТКЛЮЧЕНИЕ МЫШИ (1.8s + Звук извлечения) 🖱️", font=("Segoe UI", 9, "bold"), bg="#f38ba8", fg="#11111b", bd=0, command=lambda: self.send_command("DEVICE_DISCONNECT")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(row_disconnect, text="🌪️ СРЫВ СЕНСОРА МЫШИ (В УГОЛ) 🖱️", font=("Segoe UI", 9, "bold"), bg="#fab387", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:SPINOUT")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
+        card_inv, _ = self.create_card(tab, "9. ИНВЕРСИЯ ОСЕЙ УПРАВЛЕНИЯ", "Разворачивает движение мыши по горизонтали и/или вертикали", self.accent_peach)
+        row_ix = tk.Frame(card_inv, bg=self.card_color)
+        row_ix.pack(fill=tk.X, pady=2)
+        tk.Label(row_ix, text="Ось X (Горизонталь):", font=("Segoe UI", 9, "bold"), bg=self.card_color, fg=self.text_color, width=18, anchor=tk.W).pack(side=tk.LEFT)
+        self.btn_inv_x = tk.Button(row_ix, text="⚪ НОРМА X", font=("Segoe UI", 8, "bold"), bg=self.surface1, fg=self.text_color, bd=0, padx=8, pady=2, cursor="hand2", command=self.toggle_inv_x)
+        self.btn_inv_x.pack(side=tk.RIGHT, fill=tk.X, expand=True)
 
-        # Ряд 1.5: Интерактивная Каптча (Пауза геймплея)
-        row_captcha_main = tk.Frame(troll_frame, bg=self.panel_color)
-        row_captcha_main.pack(fill=tk.X, pady=2)
-        tk.Button(row_captcha_main, text="🧩 КАПТЧА / ЗАГАДКА (ПАУЗА ИГРЫ) ⏸️", font=("Segoe UI", 9, "bold"), bg="#a6e3a1", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:CAPTCHA")).pack(fill=tk.X, expand=True, padx=2)
+        row_iy = tk.Frame(card_inv, bg=self.card_color)
+        row_iy.pack(fill=tk.X, pady=2)
+        tk.Label(row_iy, text="Ось Y (Вертикаль):", font=("Segoe UI", 9, "bold"), bg=self.card_color, fg=self.text_color, width=18, anchor=tk.W).pack(side=tk.LEFT)
+        self.btn_inv_y = tk.Button(row_iy, text="⚪ НОРМА Y", font=("Segoe UI", 8, "bold"), bg=self.surface1, fg=self.text_color, bd=0, padx=8, pady=2, cursor="hand2", command=self.toggle_inv_y)
+        self.btn_inv_y.pack(side=tk.RIGHT, fill=tk.X, expand=True)
 
-        row_captcha_modes = tk.Frame(troll_frame, bg=self.panel_color)
-        row_captcha_modes.pack(fill=tk.X, pady=2)
-        tk.Button(row_captcha_modes, text="🎲 Случайная", font=("Segoe UI", 8, "bold"), bg="#94e2d5", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:CAPTCHA:RANDOM")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
-        tk.Button(row_captcha_modes, text="➕ Математика", font=("Segoe UI", 8, "bold"), bg="#89b4fa", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:CAPTCHA:MATH")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
-        tk.Button(row_captcha_modes, text="🤖 reCAPTCHA", font=("Segoe UI", 8, "bold"), bg="#b4befe", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:CAPTCHA:RECAPTCHA")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
-        tk.Button(row_captcha_modes, text="🧠 Загадка osu!", font=("Segoe UI", 8, "bold"), bg="#cba6f7", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:CAPTCHA:TRIVIA")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
+        row_i_all = tk.Frame(card_inv, bg=self.card_color)
+        row_i_all.pack(fill=tk.X, pady=(4, 0))
+        tk.Button(row_i_all, text="ИНВЕРТИРОВАТЬ X+Y", font=("Segoe UI", 8, "bold"), bg=self.accent_peach, fg=self.accent_dark, bd=0, padx=6, pady=2, cursor="hand2", command=self.invert_both).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(row_i_all, text="Сброс в норму", font=("Segoe UI", 8, "bold"), bg=self.surface1, fg=self.text_color, bd=0, padx=6, pady=2, cursor="hand2", command=self.invert_reset).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
 
-        # Ряд 2: Экран обновления Windows (Фаза 4)
-        row_update = tk.Frame(troll_frame, bg=self.panel_color)
-        row_update.pack(fill=tk.X, pady=2)
-        tk.Button(row_update, text="🔄 ОБНОВЛЕНИЕ WINDOWS (Пауза 3.5s + Спиннер) ⚙️", font=("Segoe UI", 9, "bold"), bg="#005a9e", fg="#ffffff", bd=0, command=lambda: self.send_command("TROLL:UPDATE")).pack(fill=tk.X, expand=True, padx=2)
+        card_jam, _ = self.create_card(tab, "10. ЗАЛИПАНИЕ КЛАВИШ (K1 / K2)", "Блокирует клики выбранной клавиши (эмуляция зажатой кнопки)", self.accent_red)
+        row_jk1 = tk.Frame(card_jam, bg=self.card_color)
+        row_jk1.pack(fill=tk.X, pady=2)
+        tk.Label(row_jk1, text="Клавиша K1 (Левая):", font=("Segoe UI", 9, "bold"), bg=self.card_color, fg=self.text_color, width=18, anchor=tk.W).pack(side=tk.LEFT)
+        self.btn_jam_k1 = tk.Button(row_jk1, text="⚪ РАБОТАЕТ", font=("Segoe UI", 8, "bold"), bg=self.surface1, fg=self.text_color, bd=0, padx=8, pady=2, cursor="hand2", command=self.toggle_jam_k1)
+        self.btn_jam_k1.pack(side=tk.RIGHT, fill=tk.X, expand=True)
 
-        # Ряд 3: BSOD на весь экран
-        row_troll_3 = tk.Frame(troll_frame, bg=self.panel_color)
-        row_troll_3.pack(fill=tk.X, pady=2)
-        tk.Button(row_troll_3, text="💻 СИНИЙ ЭКРАН СМЕРТИ (BSOD НА ВЕСЬ ЭКРАН) 💥", font=("Segoe UI", 9, "bold"), bg="#0078d7", fg="#ffffff", bd=0, command=lambda: self.send_command("TROLL:BSOD")).pack(fill=tk.X, expand=True, padx=2)
+        row_jk2 = tk.Frame(card_jam, bg=self.card_color)
+        row_jk2.pack(fill=tk.X, pady=2)
+        tk.Label(row_jk2, text="Клавиша K2 (Правая):", font=("Segoe UI", 9, "bold"), bg=self.card_color, fg=self.text_color, width=18, anchor=tk.W).pack(side=tk.LEFT)
+        self.btn_jam_k2 = tk.Button(row_jk2, text="⚪ РАБОТАЕТ", font=("Segoe UI", 8, "bold"), bg=self.surface1, fg=self.text_color, bd=0, padx=8, pady=2, cursor="hand2", command=self.toggle_jam_k2)
+        self.btn_jam_k2.pack(side=tk.RIGHT, fill=tk.X, expand=True)
 
-        # Ряд 4: Донат от Папича + Залипание клавиш (Фаза 4)
-        row_p4_alerts = tk.Frame(troll_frame, bg=self.panel_color)
-        row_p4_alerts.pack(fill=tk.X, pady=2)
-        tk.Button(row_p4_alerts, text="💰 ДОНАТ ОТ ПАПИЧА (5000₽) 👑", font=("Segoe UI", 9, "bold"), bg="#fab387", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:DONATE")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(row_p4_alerts, text="⌨️ ЗАЛИПАНИЕ КЛАВИШ ⚠️", font=("Segoe UI", 9, "bold"), bg="#cba6f7", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:STICKYKEYS")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
+        tk.Button(card_jam, text="Разблокировать обе клавиши", font=("Segoe UI", 8, "bold"), bg=self.surface1, fg=self.text_color, bd=0, padx=6, pady=2, cursor="hand2", command=self.jam_reset).pack(fill=tk.X, pady=(4, 0))
 
-        # Ряд 5: Отвал видеокарты / Глитч (Фаза 4)
-        row_glitch = tk.Frame(troll_frame, bg=self.panel_color)
-        row_glitch.pack(fill=tk.X, pady=2)
-        tk.Button(row_glitch, text="📺 ОТВАЛ ВИДЕОКАРТЫ / МАТРИЧНЫЙ ГЛИТЧ ⚡", font=("Segoe UI", 9, "bold"), bg="#eba0ac", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:GLITCH")).pack(fill=tk.X, expand=True, padx=2)
+    # =========================================================================
+    # ВКЛАДКА 3: ИСКАЖЕНИЯ & АУДИО (Экран, Камера, Ноты, Звуки)
+    # =========================================================================
+    def populate_tab_distortions(self, tab):
+        card_cam, _ = self.create_card(tab, "1. КАМЕРА & ВРАЩЕНИЕ ЭКРАНА", "Вращение и качка экрана во время игры", self.accent_mauve)
+        row_c1 = tk.Frame(card_cam, bg=self.card_color)
+        row_c1.pack(fill=tk.X, pady=2)
+        self.create_toggle_btn(row_c1, "DRUNK", "🍾 Пьяная камера (Качка ±15°)", "DRUNK_ON", "DRUNK_OFF", self.accent_yellow)
 
+        row_c2 = tk.Frame(card_cam, bg=self.card_color)
+        row_c2.pack(fill=tk.X, pady=2)
+        self.create_toggle_btn(row_c2, "CAROUSEL", "🌀 Вечная карусель 360°", "CAROUSEL_ON", "CAROUSEL_OFF", self.accent_mauve)
 
-        # Ряд 6: Батарея + Defender
-        row_troll_1 = tk.Frame(troll_frame, bg=self.panel_color)
-        row_troll_1.pack(fill=tk.X, pady=2)
-        tk.Button(row_troll_1, text="БАТАРЕЯ 5% 🔋", font=("Segoe UI", 9, "bold"), bg="#f38ba8", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:BATTERY")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(row_troll_1, text="УГРОЗА DEFENDER 🛡️", font=("Segoe UI", 9, "bold"), bg="#fab387", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:DEFENDER")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
+        tk.Button(
+            card_cam,
+            text="🔄 БОЧКА / ОДИН ОБОРОТ 360° (3.5s)",
+            font=("Segoe UI", 9, "bold"),
+            bg=self.surface1,
+            fg=self.accent_mauve,
+            activebackground=self.accent_mauve,
+            activeforeground=self.accent_dark,
+            bd=0,
+            padx=8,
+            pady=4,
+            cursor="hand2",
+            command=lambda: self.send_command("BARREL_ROLL")
+        ).pack(fill=tk.X, pady=(4, 0))
 
-        # Ряд 7: Discord
-        row_troll_2 = tk.Frame(troll_frame, bg=self.panel_color)
-        row_troll_2.pack(fill=tk.X, pady=2)
-        tk.Button(row_troll_2, text="ВХОДЯЩИЙ DISCORD 📞", font=("Segoe UI", 9, "bold"), bg="#5865F2", fg="#ffffff", bd=0, command=lambda: self.send_command("TROLL:DISCORD")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(row_troll_2, text="ДИСКОРД (ТОЛЬКО ЗВУК) 🔊", font=("Segoe UI", 9, "bold"), bg="#7289da", fg="#ffffff", bd=0, command=lambda: self.send_command("TROLL:DISCORD_AUDIO")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
+        card_fps, _ = self.create_card(tab, "2. ОГРАНИЧЕНИЕ FPS (ТРОТТЛИНГ)", "Искусственное занижение частоты кадров игрока", self.accent_peach)
+        self.fps_scale, self.fps_badge = self.create_slider_row(
+            card_fps, "Целевой FPS:", 10, 240, 60, "{:.0f} FPS",
+            lambda v: self.send_command(f"SET_FPS:{int(v)}"), "SET_FPS:0"
+        )
+        f_presets = tk.Frame(card_fps, bg=self.card_color)
+        f_presets.pack(fill=tk.X, pady=(4, 0))
+        for txt, val in [("15 FPS", 15), ("30 FPS", 30), ("60 FPS", 60), ("120 FPS", 120), ("Сброс ♾️", 0)]:
+            tk.Button(
+                f_presets, text=txt, font=("Segoe UI", 8, "bold"),
+                bg=self.surface1, fg=self.text_color, activebackground=self.accent_peach,
+                activeforeground=self.accent_dark, bd=0, padx=4, pady=2, cursor="hand2",
+                command=lambda v=val: [self.fps_scale.set(v if v > 0 else 60), self.fps_badge.config(text=f"{v} FPS" if v > 0 else "Без лимита"), self.send_command(f"SET_FPS:{v}")]
+            ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
 
-        # Ряд 8: Telegram от Мамули (Фаза 5)
-        row_troll_tg = tk.Frame(troll_frame, bg=self.panel_color)
-        row_troll_tg.pack(fill=tk.X, pady=2)
-        tk.Button(row_troll_tg, text="ЗВОНОК TELEGRAM (МАМУЛЯ ❤️) 📱", font=("Segoe UI", 9, "bold"), bg="#29b6f6", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:TELEGRAM")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(row_troll_tg, text="ТЕЛЕГРАМ (ТОЛЬКО ЗВУК) 🔔", font=("Segoe UI", 9, "bold"), bg="#0288d1", fg="#ffffff", bd=0, command=lambda: self.send_command("TROLL:TELEGRAM_AUDIO")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
+        card_cs = self.create_toggle_card(
+            tab, "CS_CHAOS", "3. ХАОС РАЗМЕРОВ НОТ (CS CHAOS)",
+            "Каждая нота получает случайный масштаб: от микроскопической до гигантской",
+            "CS_CHAOS_ON", "CS_CHAOS_OFF", self.accent_peach
+        )
+        self.cs_min_scale, self.cs_min_badge = self.create_slider_row(
+            card_cs, "Микро (Min scale):", 0.08, 1.00, 0.40, "{:.2f}x",
+            self.on_cs_min_slider
+        )
+        self.cs_max_scale, self.cs_max_badge = self.create_slider_row(
+            card_cs, "Гигантизм (Max scale):", 1.00, 3.50, 1.70, "{:.2f}x",
+            self.on_cs_max_slider
+        )
 
-        # Ряд 9: Steam + Водяной знак Windows (Фаза 5)
-        row_troll_steam = tk.Frame(troll_frame, bg=self.panel_color)
-        row_troll_steam.pack(fill=tk.X, pady=2)
-        tk.Button(row_troll_steam, text="💬 STEAM СООБЩЕНИЕ (Сотка на шаурму) 🎮", font=("Segoe UI", 9, "bold"), bg="#1b2838", fg="#66c0f4", bd=0, command=lambda: self.send_command("TROLL:STEAM")).pack(fill=tk.X, expand=True, padx=2)
+        card_vis, _ = self.create_card(tab, "4. ВИЗУАЛЬНЫЕ ДЕБАФФЫ", "Фильтры изображения и скрытие элементов", self.accent_cyan)
+        grid_vis = tk.Frame(card_vis, bg=self.card_color)
+        grid_vis.pack(fill=tk.X)
+        self.create_toggle_btn(grid_vis, "MOSAIC", "🔲 Режим 144p (Мозаика)", "MOSAIC_ON", "MOSAIC_OFF", self.accent_cyan, side=tk.LEFT)
+        self.create_toggle_btn(grid_vis, "INVERT_COLORS", "🌗 Негатив / Инверсия", "INVERT_COLORS_ON", "INVERT_COLORS_OFF", self.accent_yellow, side=tk.RIGHT)
 
-        row_watermark = tk.Frame(troll_frame, bg=self.panel_color)
-        row_watermark.pack(fill=tk.X, pady=2)
-        tk.Label(row_watermark, text="Водяной знак Активация Windows:", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=30, anchor=tk.W).pack(side=tk.LEFT)
-        tk.Button(row_watermark, text="ВКЛЮЧИТЬ", font=("Segoe UI", 9, "bold"), bg=self.accent_on, fg="#11111b", bd=0, command=lambda: self.send_command("WATERMARK_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(row_watermark, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("WATERMARK_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        grid_vis2 = tk.Frame(card_vis, bg=self.card_color)
+        grid_vis2.pack(fill=tk.X, pady=(4, 0))
+        self.create_toggle_btn(grid_vis2, "TUNNEL", "🔦 Туннель (Фонарик)", "TUNNEL_ON", "TUNNEL_OFF", self.accent_cyan, side=tk.LEFT)
+        self.create_toggle_btn(grid_vis2, "GHOST_SLIDERS", "👻 Невидимка-слайдеры", "GHOST_SLIDERS_ON", "GHOST_SLIDERS_OFF", self.accent_mauve, side=tk.RIGHT)
 
-        # Фаза 6: Троллинг звуками и эффектами
-        # Ряд 10: Стук в дверь
-        row_knock = tk.Frame(troll_frame, bg=self.panel_color)
-        row_knock.pack(fill=tk.X, pady=2)
-        tk.Button(row_knock, text="🚪 3D СТУК В ДВЕРЬ (ЗВУК ЗА СПИНОЙ) 🔊", font=("Segoe UI", 9, "bold"), bg="#fab387", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:KNOCK")).pack(fill=tk.X, expand=True, padx=2)
+        card_shake, _ = self.create_card(tab, "5. ТРЯСКА & СКРЫТИЕ (HIDDEN)", "Землетрясение интерфейса и скрытие нот", self.accent_peach)
+        row_sh = tk.Frame(card_shake, bg=self.card_color)
+        row_sh.pack(fill=tk.X, pady=(0, 4))
+        self.create_toggle_btn(row_sh, "EARTHQUAKE", "🌋 Землетрясение", "EARTHQUAKE_ON", "EARTHQUAKE_OFF", self.accent_peach, side=tk.LEFT)
+        self.create_toggle_btn(row_sh, "HIDDEN", "🙈 Слепота (Hidden)", "HIDDEN_ON", "HIDDEN_OFF", self.accent_red, side=tk.RIGHT)
+        self.create_slider_row(
+            card_shake, "Магнитуда тряски:", 0.0, 3.0, 1.0, "{:.2f}x",
+            lambda v: self.send_command(f"EARTHQUAKE_STRENGTH:{v:.2f}")
+        )
 
-        # Ряд 11: Писк комара (3 звука отдельно + Стоп)
-        row_mosq = tk.Frame(troll_frame, bg=self.panel_color)
+        card_audio, _ = self.create_card(tab, "6. ЗВУКОВЫЕ ЭФФЕКТЫ (AUDIO HAVOC)", "Искажение аудиопотока и дезориентация", self.accent_blue)
+        row_a1 = tk.Frame(card_audio, bg=self.card_color)
+        row_a1.pack(fill=tk.X, pady=2)
+        self.create_toggle_btn(row_a1, "MUFFLED", "🌊 Под водой (Low-Pass)", "MUFFLED_ON", "MUFFLED_OFF", self.accent_blue, side=tk.LEFT)
+        self.create_toggle_btn(row_a1, "PAN_SPIN", "🎧 8D Панорама", "PAN_SPIN_ON", "PAN_SPIN_OFF", self.accent_pink, side=tk.RIGHT)
+
+        row_a2 = tk.Frame(card_audio, bg=self.card_color)
+        row_a2.pack(fill=tk.X, pady=2)
+        self.create_toggle_btn(row_a2, "REVERB", "⛪ Эхо в соборе", "REVERB_ON", "REVERB_OFF", self.accent_mauve, side=tk.LEFT)
+        self.create_toggle_btn(row_a2, "BASS_BOOST", "📢 Bass Boost / Ear Rape", "BASS_BOOST_ON", "BASS_BOOST_OFF", self.accent_red, side=tk.RIGHT)
+
+        tk.Button(
+            card_audio,
+            text="📼 ЗАЖЕВАЛО ПЛЕНКУ / ОСТАНОВКА ВИНИЛА (TAPE STOP) 🛑",
+            font=("Segoe UI", 9, "bold"),
+            bg=self.surface1,
+            fg=self.accent_peach,
+            activebackground=self.accent_peach,
+            activeforeground=self.accent_dark,
+            bd=0,
+            padx=8,
+            pady=3,
+            cursor="hand2",
+            command=lambda: self.send_command("TAPE_STOP")
+        ).pack(fill=tk.X, pady=(4, 0))
+
+        card_desync, _ = self.create_card(tab, "7. РАССИНХРОН ЗВУКА (AUDIO OFFSET)", "Сдвигает аудио относительно хит-объектов", self.accent_yellow)
+        self.desync_scale, self.desync_badge = self.create_slider_row(
+            card_desync, "Сдвиг аудио:", -300, 300, 0, "{:+d} ms",
+            lambda v: self.send_command(f"AUDIO_DESYNC:{int(v)}"), "AUDIO_DESYNC:0"
+        )
+        d_presets = tk.Frame(card_desync, bg=self.card_color)
+        d_presets.pack(fill=tk.X, pady=(4, 0))
+        for txt, val in [("-150ms (Спешит)", -150), ("-75ms", -75), ("0 (Синхрон)", 0), ("+75ms", 75), ("+150ms (Отстает)", 150)]:
+            tk.Button(
+                d_presets, text=txt, font=("Segoe UI", 8, "bold"),
+                bg=self.surface1, fg=self.text_color, activebackground=self.accent_yellow,
+                activeforeground=self.accent_dark, bd=0, padx=4, pady=2, cursor="hand2",
+                command=lambda v=val: [self.desync_scale.set(v), self.desync_badge.config(text=f"{v:+d} ms"), self.send_command(f"AUDIO_DESYNC:{v}")]
+            ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+
+        card_cham, _ = self.create_card(tab, "8. ХАМЕЛЕОН (ЦВЕТА НОТ)", "Изменение палитры комбо-цветов хит-серклов", self.accent_pink)
+        c_row = tk.Frame(card_cham, bg=self.card_color)
+        c_row.pack(fill=tk.X)
+        for txt, cmd, col in [("Обычные", "CHAMELEON_OFF", self.surface1), ("Черный стелс", "CHAMELEON_BLACK", self.accent_dark), ("Радуга Диско", "CHAMELEON_RAINBOW", self.accent_pink), ("Монохром", "CHAMELEON_MONO", self.text_dim)]:
+            tk.Button(
+                c_row, text=txt, font=("Segoe UI", 8, "bold"),
+                bg=col if col != self.accent_dark else "#000000",
+                fg=self.text_color if col != self.accent_pink else self.accent_dark,
+                activebackground=self.accent_blue, activeforeground=self.accent_dark,
+                bd=0, padx=4, pady=3, cursor="hand2",
+                command=lambda c=cmd: self.send_command(c)
+            ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+
+        card_mir, _ = self.create_card(tab, "9. ОТЗЕРКАЛИВАНИЕ", "Инверсия осей отображения игрового поля и HUD", self.accent_peach)
+        m_row = tk.Frame(card_mir, bg=self.card_color)
+        m_row.pack(fill=tk.X)
+        self.create_toggle_btn(m_row, "MIRROR_PF_X", "Поле Ось X", "MIRROR_PLAYFIELD_X_ON", "MIRROR_PLAYFIELD_X_OFF", self.accent_peach, side=tk.LEFT)
+        self.create_toggle_btn(m_row, "MIRROR_PF_Y", "Поле Ось Y", "MIRROR_PLAYFIELD_Y_ON", "MIRROR_PLAYFIELD_Y_OFF", self.accent_peach, side=tk.LEFT)
+        self.create_toggle_btn(m_row, "MIRROR_HUD_X", "HUD Ось X", "MIRROR_HUD_X_ON", "MIRROR_HUD_X_OFF", self.accent_blue, side=tk.RIGHT)
+
+    def create_toggle_btn(self, parent, key: str, text: str, on_cmd: str, off_cmd: str, accent: str, side=tk.LEFT):
+        btn = tk.Button(
+            parent,
+            text=f"⚪ {text}",
+            font=("Segoe UI", 8, "bold"),
+            bg=self.surface1,
+            fg=self.text_color,
+            activebackground=accent,
+            activeforeground=self.accent_dark,
+            bd=0,
+            padx=8,
+            pady=3,
+            cursor="hand2"
+        )
+        btn.pack(side=side, fill=tk.X, expand=True, padx=2)
+
+        def _click():
+            st = self.toggle_states.get(key, False)
+            cmd = on_cmd if not st else off_cmd
+            self.send_command(cmd)
+
+        btn.config(command=_click)
+        self.toggle_widgets[key] = {
+            "btn": btn,
+            "badge": None,
+            "title": None,
+            "accent": accent,
+            "base_text": text,
+            "on_cmd": on_cmd,
+            "off_cmd": off_cmd
+        }
+        return btn
+
+    # =========================================================================
+    # ВКЛАДКА 4: ПРАНКИ & ИВЕНТЫ (Каптча, Звонки, Ошибки, Звуки)
+    # =========================================================================
+    def populate_tab_pranks(self, tab):
+        card_cap, _ = self.create_card(
+            tab, "🧩 ИНТЕРАКТИВНАЯ КАПТЧА / ЗАГАДКА (ПАУЗА ИГРЫ)",
+            "Останавливает трек и геймплей. Игрок обязан решить задачу, чтобы продолжить!",
+            self.accent_green
+        )
+        tk.Button(
+            card_cap,
+            text="🎲 СЛУЧАЙНАЯ КАПТЧА (ВЫЗОВ С ПАУЗОЙ) ⏸️",
+            font=("Segoe UI", 10, "bold"),
+            bg=self.accent_green,
+            fg=self.accent_dark,
+            activebackground=self.accent_yellow,
+            activeforeground=self.accent_dark,
+            bd=0,
+            padx=10,
+            pady=6,
+            cursor="hand2",
+            command=lambda: self.send_command("TROLL:CAPTCHA:RANDOM")
+        ).pack(fill=tk.X, pady=(0, 4))
+
+        c_modes = tk.Frame(card_cap, bg=self.card_color)
+        c_modes.pack(fill=tk.X)
+        for txt, cmd, col in [("➕ Математика", "TROLL:CAPTCHA:MATH", self.accent_blue), ("🤖 reCAPTCHA", "TROLL:CAPTCHA:RECAPTCHA", self.accent_mauve), ("🧠 Загадка osu!", "TROLL:CAPTCHA:TRIVIA", self.accent_cyan)]:
+            tk.Button(
+                c_modes, text=txt, font=("Segoe UI", 8, "bold"),
+                bg=self.surface1, fg=col, activebackground=col,
+                activeforeground=self.accent_dark, bd=0, padx=6, pady=3, cursor="hand2",
+                command=lambda c=cmd: self.send_command(c)
+            ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+
+        card_sys, _ = self.create_card(tab, "💻 СИСТЕМНЫЕ СБОИ WINDOWS", "Симуляция фатальных ошибок ОС и железа", self.accent_blue)
+        tk.Button(
+            card_sys,
+            text="💻 СИНИЙ ЭКРАН СМЕРТИ (BSOD НА ВЕСЬ ЭКРАН 3.5s) 💥",
+            font=("Segoe UI", 9, "bold"),
+            bg="#0078d7",
+            fg="#ffffff",
+            activebackground=self.accent_cyan,
+            activeforeground=self.accent_dark,
+            bd=0,
+            padx=8,
+            pady=4,
+            cursor="hand2",
+            command=lambda: self.send_command("TROLL:BSOD")
+        ).pack(fill=tk.X, pady=2)
+
+        tk.Button(
+            card_sys,
+            text="🔄 ОБНОВЛЕНИЕ WINDOWS (Черный экран 3.5s со спиннером) ⚙️",
+            font=("Segoe UI", 9, "bold"),
+            bg="#005a9e",
+            fg="#ffffff",
+            activebackground=self.accent_blue,
+            activeforeground=self.accent_dark,
+            bd=0,
+            padx=8,
+            pady=4,
+            cursor="hand2",
+            command=lambda: self.send_command("TROLL:UPDATE")
+        ).pack(fill=tk.X, pady=2)
+
+        row_sys_btns = tk.Frame(card_sys, bg=self.card_color)
+        row_sys_btns.pack(fill=tk.X, pady=2)
+        tk.Button(
+            row_sys_btns, text="⚡ Отвал видеокарты (Глитч)", font=("Segoe UI", 8, "bold"),
+            bg=self.surface1, fg=self.accent_pink, bd=0, padx=6, pady=3, cursor="hand2",
+            command=lambda: self.send_command("TROLL:GLITCH")
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(
+            row_sys_btns, text="🔌 Сбой GPU (1.3s черный)", font=("Segoe UI", 8, "bold"),
+            bg=self.surface1, fg="#76b900", bd=0, padx=6, pady=3, cursor="hand2",
+            command=lambda: self.send_command("TROLL:GPU_CRASH")
+        ).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
+
+        row_sys_btns2 = tk.Frame(card_sys, bg=self.card_color)
+        row_sys_btns2.pack(fill=tk.X, pady=2)
+        tk.Button(
+            row_sys_btns2, text="🔋 Батарея 5%", font=("Segoe UI", 8, "bold"),
+            bg=self.surface1, fg=self.accent_red, bd=0, padx=6, pady=3, cursor="hand2",
+            command=lambda: self.send_command("TROLL:BATTERY")
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(
+            row_sys_btns2, text="🛡️ Защитник Windows", font=("Segoe UI", 8, "bold"),
+            bg=self.surface1, fg=self.accent_peach, bd=0, padx=6, pady=3, cursor="hand2",
+            command=lambda: self.send_command("TROLL:DEFENDER")
+        ).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
+
+        self.create_toggle_btn(card_sys, "WATERMARK", "Водяной знак Активация Windows", "WATERMARK_ON", "WATERMARK_OFF", self.accent_yellow)
+
+        card_call, _ = self.create_card(tab, "📱 МЕССЕНДЖЕРЫ И ЗВОНКИ", "Фейковые входящие вызовы и сообщения со звуком", self.accent_cyan)
+        row_tg = tk.Frame(card_call, bg=self.card_color)
+        row_tg.pack(fill=tk.X, pady=2)
+        tk.Button(
+            row_tg, text="📱 Звонок Telegram (Мамуля ❤️)", font=("Segoe UI", 9, "bold"),
+            bg="#29b6f6", fg=self.accent_dark, bd=0, padx=8, pady=3, cursor="hand2",
+            command=lambda: self.send_command("TROLL:TELEGRAM")
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(
+            row_tg, text="🔔 Звук звонка", font=("Segoe UI", 8, "bold"),
+            bg=self.surface1, fg="#29b6f6", bd=0, padx=6, pady=3, cursor="hand2",
+            command=lambda: self.send_command("TROLL:TELEGRAM_AUDIO")
+        ).pack(side=tk.RIGHT, padx=2)
+
+        row_dc = tk.Frame(card_call, bg=self.card_color)
+        row_dc.pack(fill=tk.X, pady=2)
+        tk.Button(
+            row_dc, text="📞 Входящий звонок Discord", font=("Segoe UI", 9, "bold"),
+            bg="#5865F2", fg="#ffffff", bd=0, padx=8, pady=3, cursor="hand2",
+            command=lambda: self.send_command("TROLL:DISCORD")
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(
+            row_dc, text="🔊 Звук вызова", font=("Segoe UI", 8, "bold"),
+            bg=self.surface1, fg="#7289da", bd=0, padx=6, pady=3, cursor="hand2",
+            command=lambda: self.send_command("TROLL:DISCORD_AUDIO")
+        ).pack(side=tk.RIGHT, padx=2)
+
+        tk.Button(
+            card_call,
+            text="💬 Steam сообщение (Сотка на шаурму) 🎮",
+            font=("Segoe UI", 9, "bold"),
+            bg="#1b2838",
+            fg="#66c0f4",
+            activebackground="#66c0f4",
+            activeforeground=self.accent_dark,
+            bd=0,
+            padx=8,
+            pady=3,
+            cursor="hand2",
+            command=lambda: self.send_command("TROLL:STEAM")
+        ).pack(fill=tk.X, pady=2)
+
+        card_snd, _ = self.create_card(tab, "🚪 3D АУДИО & ВНЕЗАПНЫЕ ЭФФЕКТЫ", "Звуки присутствия и визуальные вспышки", self.accent_peach)
+        tk.Button(
+            card_snd,
+            text="🚪 3D СТУК В ДВЕРЬ (Звук за спиной) 🔊",
+            font=("Segoe UI", 9, "bold"),
+            bg=self.surface1,
+            fg=self.accent_peach,
+            activebackground=self.accent_peach,
+            activeforeground=self.accent_dark,
+            bd=0,
+            padx=8,
+            pady=4,
+            cursor="hand2",
+            command=lambda: self.send_command("TROLL:KNOCK")
+        ).pack(fill=tk.X, pady=2)
+
+        row_mosq = tk.Frame(card_snd, bg=self.card_color)
         row_mosq.pack(fill=tk.X, pady=2)
-        tk.Label(row_mosq, text="🦟 Комар:", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=10, anchor=tk.W).pack(side=tk.LEFT)
-        tk.Button(row_mosq, text="Звук 1 🦟", font=("Segoe UI", 9, "bold"), bg="#a6e3a1", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:MOSQUITO:1")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
-        tk.Button(row_mosq, text="Звук 2 🦟", font=("Segoe UI", 9, "bold"), bg="#f9e2af", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:MOSQUITO:2")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
-        tk.Button(row_mosq, text="Звук 3 🦟", font=("Segoe UI", 9, "bold"), bg="#fab387", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:MOSQUITO:3")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
-        tk.Button(row_mosq, text="⏹️ Стоп", font=("Segoe UI", 9, "bold"), bg="#f38ba8", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:MOSQUITO:STOP")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
+        tk.Label(row_mosq, text="🦟 Комар:", font=("Segoe UI", 9, "bold"), bg=self.card_color, fg=self.text_color, width=9, anchor=tk.W).pack(side=tk.LEFT)
+        for txt, cmd, col in [("Звук 1", "TROLL:MOSQUITO:1", self.accent_green), ("Звук 2", "TROLL:MOSQUITO:2", self.accent_yellow), ("Звук 3", "TROLL:MOSQUITO:3", self.accent_peach), ("⏹️ Стоп", "TROLL:MOSQUITO:STOP", self.accent_red)]:
+            tk.Button(
+                row_mosq, text=txt, font=("Segoe UI", 8, "bold"),
+                bg=self.surface1, fg=col, activebackground=col,
+                activeforeground=self.accent_dark, bd=0, padx=6, pady=2, cursor="hand2",
+                command=lambda c=cmd: self.send_command(c)
+            ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
 
-        # Ряд 12: Сбой видеодрайвера
-        row_gpu = tk.Frame(troll_frame, bg=self.panel_color)
-        row_gpu.pack(fill=tk.X, pady=2)
-        tk.Button(row_gpu, text="🔌 СБОЙ ВИДЕОДРАЙВЕРА (ЧЕРНЫЙ ЭКРАН 1.3s + ВОССТАНОВЛЕНИЕ) ⚠️", font=("Segoe UI", 9, "bold"), bg="#76b900", fg="#ffffff", bd=0, command=lambda: self.send_command("TROLL:GPU_CRASH")).pack(fill=tk.X, expand=True, padx=2)
+        row_fun = tk.Frame(card_snd, bg=self.card_color)
+        row_fun.pack(fill=tk.X, pady=2)
+        tk.Button(
+            row_fun, text="💰 Донат Папича (5000₽)", font=("Segoe UI", 8, "bold"),
+            bg=self.surface1, fg=self.accent_peach, bd=0, padx=6, pady=3, cursor="hand2",
+            command=lambda: self.send_command("TROLL:DONATE")
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(
+            row_fun, text="💥 Flashbang", font=("Segoe UI", 8, "bold"),
+            bg=self.surface1, fg="#ffffff", bd=0, padx=6, pady=3, cursor="hand2",
+            command=lambda: self.send_command("FLASHBANG")
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(
+            row_fun, text="❌ Фейк-мисс", font=("Segoe UI", 8, "bold"),
+            bg=self.surface1, fg=self.accent_red, bd=0, padx=6, pady=3, cursor="hand2",
+            command=lambda: self.send_command("FAKE_MISS")
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
 
-        # Ряд 13: Муха на мониторе
-        row_fly = tk.Frame(troll_frame, bg=self.panel_color)
-        row_fly.pack(fill=tk.X, pady=2)
-        tk.Label(row_fly, text="🪰 Муха на мониторе:", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color, width=22, anchor=tk.W).pack(side=tk.LEFT)
-        tk.Button(row_fly, text="ВКЛЮЧИТЬ 🪰", font=("Segoe UI", 9, "bold"), bg=self.accent_on, fg="#11111b", bd=0, command=lambda: self.send_command("FLY_ON")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        tk.Button(row_fly, text="ВЫКЛ", font=("Segoe UI", 9, "bold"), bg=self.accent_off, fg="#11111b", bd=0, command=lambda: self.send_command("FLY_OFF")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        row_misc = tk.Frame(card_snd, bg=self.card_color)
+        row_misc.pack(fill=tk.X, pady=(4, 0))
+        self.create_toggle_btn(row_misc, "FREEZE", "⏳ Блэкаут (Пауза нот)", "FREEZE_ON", "FREEZE_OFF", self.accent_mauve, side=tk.LEFT)
+        self.create_toggle_btn(row_misc, "FLY", "🪰 Муха на мониторе", "FLY_ON", "FLY_OFF", self.accent_green, side=tk.RIGHT)
 
-        # ==========================================
-        # Вкладка 5: ГАЛЛЮЦИНАЦИИ
-        # ==========================================
-        hal_frame = tk.Frame(tab4, bg=self.panel_color, padx=15, pady=15)
-        hal_frame.pack(fill=tk.X, pady=5)
-        tk.Label(hal_frame, text="РАДАР ФЕЙКОВЫХ НОТ", font=("Segoe UI", 12, "bold"), bg=self.panel_color, fg=self.text_color).pack(anchor=tk.W, pady=(0, 10))
-        tk.Label(hal_frame, text="Кликайте по радару, чтобы заспавнить фейковую ноту на экране игрока.", font=("Segoe UI", 9), bg=self.panel_color, fg="#a6adc8").pack(anchor=tk.W, pady=(0, 10))
+    # =========================================================================
+    # ВКЛАДКА 5: РАДАР ФЕЙКОВЫХ НОТ (ГАЛЛЮЦИНАЦИИ)
+    # =========================================================================
+    def populate_tab_radar(self, tab):
+        card_rad, _ = self.create_card(
+            tab, "🎯 ИНТЕРАКТИВНЫЙ РАДАР СПАВНА НОТ",
+            "Кликайте по сетке, чтобы мгновенно создать иллюзию хит-серкла на экране игрока",
+            self.accent_blue
+        )
 
-        # Холст радара
-        canvas_width = 512
-        canvas_height = 384
-        
-        canvas_container = tk.Frame(hal_frame, bg=self.panel_color)
-        canvas_container.pack(fill=tk.BOTH, expand=True)
+        canvas_width = 480
+        canvas_height = 360
 
-        self.radar_canvas = tk.Canvas(canvas_container, width=canvas_width, height=canvas_height, bg="#1e1e2e", highlightthickness=1, highlightbackground=self.accent_blue)
-        self.radar_canvas.pack(pady=10)
+        self.radar_canvas = tk.Canvas(
+            card_rad,
+            width=canvas_width,
+            height=canvas_height,
+            bg="#11111b",
+            highlightthickness=1,
+            highlightbackground=self.accent_blue
+        )
+        self.radar_canvas.pack(pady=8)
 
-        for i in range(0, canvas_width, 64):
-            self.radar_canvas.create_line(i, 0, i, canvas_height, fill="#313244", dash=(2, 2))
-        for i in range(0, canvas_height, 64):
-            self.radar_canvas.create_line(0, i, canvas_width, i, fill="#313244", dash=(2, 2))
+        for i in range(0, canvas_width, 48):
+            self.radar_canvas.create_line(i, 0, i, canvas_height, fill="#24273a", dash=(2, 2))
+        for i in range(0, canvas_height, 48):
+            self.radar_canvas.create_line(0, i, canvas_width, i, fill="#24273a", dash=(2, 2))
+
+        self.radar_canvas.create_line(canvas_width // 2, 0, canvas_width // 2, canvas_height, fill="#313244", width=1)
+        self.radar_canvas.create_line(0, canvas_height // 2, canvas_width, canvas_height // 2, fill="#313244", width=1)
 
         self.radar_canvas.bind("<Button-1>", self.on_radar_click)
 
-        tk.Button(hal_frame, text="СЛУЧАЙНАЯ НОТА", font=("Segoe UI", 10, "bold"), bg=self.accent_blue, fg="#11111b", bd=0, command=self.spawn_random_note).pack(fill=tk.X, pady=10)
+        tk.Button(
+            card_rad,
+            text="🎲 ЗАСПАВНИТЬ СЛУЧАЙНУЮ НОТУ",
+            font=("Segoe UI", 10, "bold"),
+            bg=self.accent_blue,
+            fg=self.accent_dark,
+            activebackground=self.accent_green,
+            activeforeground=self.accent_dark,
+            bd=0,
+            padx=12,
+            pady=6,
+            cursor="hand2",
+            command=self.spawn_random_note
+        ).pack(fill=tk.X, pady=(6, 0))
 
-        # Баннер обратного отсчёта (показывается при активной задержке перед вызовом ивента)
-        self.countdown_banner = tk.Frame(root, bg=self.panel_color, highlightthickness=1, highlightbackground=self.accent_yellow, padx=12, pady=6)
-        self.countdown_lbl = tk.Label(self.countdown_banner, text="", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.accent_yellow)
-        self.countdown_lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        self.countdown_cancel_btn = tk.Button(self.countdown_banner, text="✕ Отмена", font=("Segoe UI", 9, "bold"), bg=self.accent_red, fg="#11111b", bd=0, padx=8, pady=2, cursor="hand2", command=self.cancel_countdown)
-        self.countdown_cancel_btn.pack(side=tk.RIGHT)
+    # =========================================================================
+    # НИЖНЯЯ ПАНЕЛЬ СТАТУСА
+    # =========================================================================
+    def build_footer(self):
+        footer_frame = tk.Frame(self.root, bg=self.bg_color, padx=16, pady=6)
+        footer_frame.pack(side=tk.BOTTOM, fill=tk.X)
 
-        # Статус бар
-        self.status_label = tk.Label(root, text="💡 Для ивентов и дебаффов выберите мод 'Chaos Remote' (CHR) в меню модов (F1)", font=("Segoe UI", 9, "bold"), bg=self.bg_color, fg=self.accent_yellow)
-        self.status_label.pack(side=tk.BOTTOM, pady=5)
+        self.status_label = tk.Label(
+            footer_frame,
+            text="💡 Готов к отправке команд • Рекомендуемый мод в игре: 'Chaos Remote' (CHR)",
+            font=("Segoe UI", 8, "bold"),
+            bg=self.bg_color,
+            fg=self.text_dim,
+            anchor=tk.W
+        )
+        self.status_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-    def set_jitter(self, val):
-        self.jitter_slider.set(val)
-        if val > 0:
-            self.jitter_header.config(text=f"ТРЯСУЩИЕСЯ РУКИ (ДЖИТТЕР: {int(val)} px 🟢)", fg=self.accent_on)
-        else:
-            self.jitter_header.config(text="ТРЯСУЩИЕСЯ РУКИ (ДЖИТТЕР: 0 px 🔴)", fg=self.text_color)
-        self.send_command(f"JITTER:{int(val)}")
+        hotkey_lbl = tk.Label(
+            footer_frame,
+            text="Ctrl+R: Сброс  |  Ctrl+F: Поиск  |  Esc: Отмена",
+            font=("Segoe UI", 8),
+            bg=self.bg_color,
+            fg=self.surface2
+        )
+        hotkey_lbl.pack(side=tk.RIGHT)
 
-    def on_jitter_slider_change(self, val):
-        px = int(float(val))
-        if px > 0:
-            self.jitter_header.config(text=f"ТРЯСУЩИЕСЯ РУКИ (ДЖИТТЕР: {px} px 🟢)", fg=self.accent_on)
-        else:
-            self.jitter_header.config(text="ТРЯСУЩИЕСЯ РУКИ (ДЖИТТЕР: 0 px 🔴)", fg=self.text_color)
-        self.send_command(f"JITTER:{px}")
-
-    def set_input_lag(self, val_ms):
-        self.lag_slider.set(val_ms)
-        self.lag_label.config(text=f"Задержка: {int(val_ms)} ms")
-        self.send_command(f"INPUT_LAG:{int(val_ms)}")
-
-    def on_lag_slider_change(self, val):
-        ms = int(float(val))
-        self.lag_label.config(text=f"Задержка: {ms} ms")
-        self.send_command(f"INPUT_LAG:{ms}")
-
-    def set_cursor_scale(self, val):
-        self.cursor_scale_slider.set(val)
-        self.cursor_scale_header.config(text=f"РАЗМЕР КУРСОРА ({val:.1f}x)")
-        self.send_command(f"CURSOR_SCALE:{val:.2f}")
-
-    def set_bh_strength(self, val):
-        self.bh_slider.set(val)
-        self.send_command(f"BLACK_HOLE_STRENGTH:{val:.2f}")
-
-    def set_audio_desync(self, val_ms):
-        self.desync_slider.set(val_ms)
-        self.desync_header.config(text=f"РАССИНХРОН ЗВУКА ({int(val_ms):+d} ms 🟢)" if val_ms != 0 else "РАССИНХРОН ЗВУКА (0 ms 🔴)", fg=self.accent_on if val_ms != 0 else self.text_color)
-        self.send_command(f"AUDIO_DESYNC:{int(val_ms)}")
-
-    def on_desync_slider_change(self, val):
-        ms = int(float(val))
-        self.desync_header.config(text=f"РАССИНХРОН ЗВУКА ({ms:+d} ms 🟢)" if ms != 0 else "РАССИНХРОН ЗВУКА (0 ms 🔴)", fg=self.accent_on if ms != 0 else self.text_color)
-        self.send_command(f"AUDIO_DESYNC:{ms}")
-
-    def on_cursor_scale_change(self, val):
-        scale = float(val)
-        self.cursor_scale_header.config(text=f"РАЗМЕР КУРСОРА ({scale:.1f}x)")
-        self.send_command(f"CURSOR_SCALE:{scale:.2f}")
-
-    def _update_invert_header(self):
-        if self.inv_x and self.inv_y:
-            self.invert_header.config(text="ИНВЕРСИЯ ОСЕЙ (X + Y ВКЛЮЧЕНЫ 🟢)", fg=self.accent_on)
-        elif self.inv_x:
-            self.invert_header.config(text="ИНВЕРСИЯ ОСЕЙ (ОСЬ X ВКЛЮЧЕНА 🟢)", fg=self.accent_yellow)
-        elif self.inv_y:
-            self.invert_header.config(text="ИНВЕРСИЯ ОСЕЙ (ОСЬ Y ВКЛЮЧЕНА 🟢)", fg=self.accent_yellow)
-        else:
-            self.invert_header.config(text="ИНВЕРСИЯ ОСЕЙ (ВЫКЛЮЧЕНА 🔴)", fg=self.text_color)
-
-    def _update_jam_header(self):
-        if self.jam_k1 and self.jam_k2:
-            self.jam_header.config(text="ЗАЛИПАНИЕ КЛАВИШ (ОБЕ ЗАЛИПЛИ! ⛔)", fg=self.accent_on)
-        elif self.jam_k1 or self.jam_k2:
-            jammed = "K1" if self.jam_k1 else "K2"
-            self.jam_header.config(text=f"ЗАЛИПАНИЕ КЛАВИШ ({jammed} ЗАЛИПЛА ⚠️)", fg=self.accent_yellow)
-        else:
-            self.jam_header.config(text="ЗАЛИПАНИЕ КЛАВИШ (K1 / K2)", fg=self.text_color)
-
-    def update_ui_state(self, command):
-        if command == "CHAOS_ON":
-            self.chaos_header.config(text="1. ХАОС (ВКЛЮЧЕН 🟢)", fg=self.accent_on)
-        elif command == "CHAOS_OFF":
-            self.chaos_header.config(text="1. ХАОС (ВЫКЛЮЧЕН 🔴)", fg=self.text_color)
-        elif command == "WIND_ON":
-            self.wind_header.config(text="2. ВЕТЕР (ВКЛЮЧЕН 🟢)", fg=self.accent_blue)
-        elif command == "WIND_OFF":
-            self.wind_header.config(text="2. ВЕТЕР (ВЫКЛЮЧЕН 🔴)", fg=self.text_color)
-        elif command == "MAGNET_ON":
-            self.magnet_header.config(text="3. МАГНИТ НОТ (ВКЛЮЧЕН 🟢)", fg=self.accent_yellow)
-        elif command == "MAGNET_OFF":
-            self.magnet_header.config(text="3. МАГНИТ НОТ (ВЫКЛЮЧЕН 🔴)", fg=self.text_color)
-        elif command == "EARTHQUAKE_ON":
-            self.earth_header.config(text="ЗЕМЛЕТРЯСЕНИЕ (ВКЛЮЧЕН 🟢)", fg=self.accent_earth)
-        elif command == "EARTHQUAKE_OFF":
-            self.earth_header.config(text="ЗЕМЛЕТРЯСЕНИЕ (ВЫКЛЮЧЕН 🔴)", fg=self.text_color)
-        elif command == "FREEZE_ON":
-            self.blackout_header.config(text="5. БЛЭКАУТ (ВКЛЮЧЕН 🟢)", fg=self.accent_blackout)
-        elif command == "FREEZE_OFF":
-            self.blackout_header.config(text="5. БЛЭКАУТ (ВЫКЛЮЧЕН 🔴)", fg=self.text_color)
-        elif command == "HIDDEN_ON":
-            self.hidden_header.config(text="СЛЕПОТА (Hidden) (ВКЛЮЧЕН 🟢)", fg=self.accent_on)
-        elif command == "HIDDEN_OFF":
-            self.hidden_header.config(text="СЛЕПОТА (Hidden) (ВЫКЛЮЧЕН 🔴)", fg=self.text_color)
-        elif command == "REPULSION_ON":
-            self.repulsion_header.config(text="ОТТАЛКИВАНИЕ КУРСОРА ОТ НОТ (ВКЛЮЧЕНО 🟢)", fg=self.accent_yellow)
-        elif command == "REPULSION_OFF":
-            self.repulsion_header.config(text="ОТТАЛКИВАНИЕ КУРСОРА ОТ НОТ (ВЫКЛЮЧЕНО 🔴)", fg=self.text_color)
-        elif command == "CLONES_ON":
-            self.clones_header.config(text="ФЕЙКОВЫЕ КУРСОРЫ: АРМИЯ КЛОНОВ (10) 🟢", fg=self.accent_on)
-        elif command == "CLONES_OFF":
-            self.clones_header.config(text="ФЕЙКОВЫЕ КУРСОРЫ (ШИЗОФРЕНИЯ)", fg=self.text_color)
-        elif command == "DRUNK_ON":
-            self.lbl_drunk.config(text="Пьяная камера (КАЧКА 🟢):", fg=self.accent_yellow)
-        elif command == "DRUNK_OFF":
-            self.lbl_drunk.config(text="Пьяная камера (Качка ±15°):", fg=self.text_color)
-        elif command == "TUNNEL_ON":
-            self.lbl_tunnel.config(text="Туннельное зрение (ФОНАРИК 🟢):", fg=self.accent_cyan)
-        elif command == "TUNNEL_OFF":
-            self.lbl_tunnel.config(text="Туннельное зрение (Фонарик):", fg=self.text_color)
-        elif command == "GHOST_SLIDERS_ON":
-            self.lbl_ghost.config(text="Невидимка-слайдеры (НЕВИДИМЫ 🟢):", fg=self.accent_purple)
-        elif command == "GHOST_SLIDERS_OFF":
-            self.lbl_ghost.config(text="Невидимка-слайдеры (Тела):", fg=self.text_color)
-        elif command == "MUFFLED_ON":
-            self.lbl_muffled.config(text="Звук под водой (LOW-PASS 🟢):", fg=self.accent_blue)
-        elif command == "MUFFLED_OFF":
-            self.lbl_muffled.config(text="Звук под водой (Low-Pass):", fg=self.text_color)
-        elif command == "PAN_SPIN_ON":
-            self.lbl_pan.config(text="8D Панорама (ВРАЩЕНИЕ 🟢):", fg="#f5c2e7")
-        elif command == "PAN_SPIN_OFF":
-            self.lbl_pan.config(text="8D Панорама (Вращение):", fg=self.text_color)
-        elif command.startswith("INPUT_LAG:"):
-            try:
-                ms = int(float(command.split(":")[1]))
-                if ms > 0:
-                    self.lag_header.config(text=f"ИНПУТ-ЛАГ ({ms} ms 🟢)", fg=self.accent_on)
-                else:
-                    self.lag_header.config(text="ИНПУТ-ЛАГ (ВЫКЛЮЧЕН 🔴)", fg=self.text_color)
-            except:
-                pass
-        elif command == "HIDE_CURSOR:ON":
-            self.hide_cursor_header.config(text="НЕВИДИМЫЙ КУРСОР (ВКЛЮЧЕН 🟢)", fg=self.accent_on)
-        elif command == "HIDE_CURSOR:OFF":
-            self.hide_cursor_header.config(text="НЕВИДИМЫЙ КУРСОР (ВЫКЛЮЧЕН 🔴)", fg=self.text_color)
-        elif command.startswith("CURSOR_SCALE:"):
-            try:
-                scale = float(command.split(":")[1])
-                self.cursor_scale_header.config(text=f"РАЗМЕР КУРСОРА ({scale:.1f}x)", fg=self.accent_yellow if scale != 1.0 else self.text_color)
-            except:
-                pass
-        elif command == "INVERT_X_ON":
-            self.inv_x = True
-            self._update_invert_header()
-        elif command == "INVERT_X_OFF":
-            self.inv_x = False
-            self._update_invert_header()
-        elif command == "INVERT_Y_ON":
-            self.inv_y = True
-            self._update_invert_header()
-        elif command == "INVERT_Y_OFF":
-            self.inv_y = False
-            self._update_invert_header()
-        elif command == "INVERT_RESET":
-            self.inv_x = False
-            self.inv_y = False
-            self._update_invert_header()
-        elif command == "JAM_K1_ON":
-            self.jam_k1 = True
-            self.lbl_k1.config(fg=self.accent_red, text="Клавиша K1: ЗАЛИПЛА ⚠️")
-            self._update_jam_header()
-        elif command == "JAM_K1_OFF":
-            self.jam_k1 = False
-            self.lbl_k1.config(fg=self.text_color, text="Клавиша K1 (Левая):")
-            self._update_jam_header()
-        elif command == "JAM_K2_ON":
-            self.jam_k2 = True
-            self.lbl_k2.config(fg=self.accent_red, text="Клавиша K2: ЗАЛИПЛА ⚠️")
-            self._update_jam_header()
-        elif command == "JAM_K2_OFF":
-            self.jam_k2 = False
-            self.lbl_k2.config(fg=self.text_color, text="Клавиша K2 (Правая):")
-            self._update_jam_header()
-        elif command == "JAM_RESET":
-            self.jam_k1 = False
-            self.jam_k2 = False
-            self.lbl_k1.config(fg=self.text_color, text="Клавиша K1 (Левая):")
-            self.lbl_k2.config(fg=self.text_color, text="Клавиша K2 (Правая):")
-            self._update_jam_header()
-        elif command == "BLACK_HOLE_ON":
-            self.bh_header.config(text="4. ЧЁРНАЯ ДЫРА (ВКЛЮЧЕНА 🟣)", fg=self.accent_blackout)
-        elif command == "BLACK_HOLE_OFF":
-            self.bh_header.config(text="4. ЧЁРНАЯ ДЫРА (ВЫКЛЮЧЕНА 🔴)", fg=self.text_color)
-        elif command == "CHAMELEON_OFF":
-            self.cham_header.config(text="ХАМЕЛЕОН (ОБЫЧНЫЕ ЦВЕТА 🔴)", fg=self.text_color)
-        elif command == "CHAMELEON_BLACK":
-            self.cham_header.config(text="ХАМЕЛЕОН (ЧЁРНЫЙ СТЕЛС 🟢)", fg="#89b4fa")
-        elif command == "CHAMELEON_RAINBOW":
-            self.cham_header.config(text="ХАМЕЛЕОН (РАДУЖНЫЙ ДИСКО 🟢)", fg="#f5c2e7")
-        elif command == "CHAMELEON_MONO":
-            self.cham_header.config(text="ХАМЕЛЕОН (МОНОХРОМНЫЙ 🟢)", fg="#a6adc8")
-        elif command == "DEVICE_DISCONNECT":
-            self.troll_header.config(text="ТРОЛЛИНГ: МЫШЬ ОТКЛЮЧЕНА 🔌", fg="#f38ba8")
-        elif command in ("TROLL:SPINOUT", "MOUSE_SPINOUT"):
-            self.troll_header.config(text="ТРОЛЛИНГ: СРЫВ СЕНСОРА МЫШИ 🌪️", fg="#fab387")
-        elif command.startswith("TROLL:CAPTCHA") or command.startswith("CAPTCHA"):
-            self.troll_header.config(text="ТРОЛЛИНГ: КАПТЧА (ПАУЗА ИГРЫ) 🧩", fg="#a6e3a1")
-        elif command == "TROLL:UPDATE":
-            self.troll_header.config(text="ТРОЛЛИНГ: ОБНОВЛЕНИЕ WINDOWS 🔄", fg="#89dceb")
-        elif command == "TROLL:DONATE":
-            self.troll_header.config(text="ТРОЛЛИНГ: ДОНАТ ОТ ПАПИЧА 💰", fg="#fab387")
-        elif command == "TROLL:STICKYKEYS":
-            self.troll_header.config(text="ТРОЛЛИНГ: ЗАЛИПАНИЕ КЛАВИШ ⌨️", fg="#cba6f7")
-        elif command == "TROLL:GLITCH":
-            self.troll_header.config(text="ТРОЛЛИНГ: ОТВАЛ ВИДЕОКАРТЫ ⚡", fg="#eba0ac")
-        elif command == "TROLL:BATTERY":
-            self.troll_header.config(text="ТРОЛЛИНГ: БАТАРЕЯ 5% 🔋", fg="#f38ba8")
-        elif command == "TROLL:DISCORD":
-            self.troll_header.config(text="ТРОЛЛИНГ: ЗВОНОК DISCORD 📞", fg="#89b4fa")
-        elif command == "TROLL:DISCORD_AUDIO":
-            self.troll_header.config(text="ТРОЛЛИНГ: ЗВОНОК (ТОЛЬКО ЗВУК) 🔊", fg="#7289da")
-        elif command == "TROLL:BSOD":
-            self.troll_header.config(text="ТРОЛЛИНГ: СИНИЙ ЭКРАН (BSOD) 💻", fg="#89dceb")
-        elif command == "TROLL:DEFENDER":
-            self.troll_header.config(text="ТРОЛЛИНГ: ЗАЩИТНИК DEFENDER 🛡️", fg="#fab387")
-        elif command in ("TROLL:TELEGRAM", "TROLL_TELEGRAM"):
-            self.troll_header.config(text="ТРОЛЛИНГ: ЗВОНОК В ТЕЛЕГРАМ (МАМУЛЯ ❤️) 📱", fg="#29b6f6")
-        elif command in ("TROLL:TELEGRAM_AUDIO", "TROLL_TELEGRAM_AUDIO"):
-            self.troll_header.config(text="ТРОЛЛИНГ: ТЕЛЕГРАМ (ТОЛЬКО ЗВУК) 🔔", fg="#0288d1")
-        elif command in ("TROLL:STEAM", "TROLL_STEAM"):
-            self.troll_header.config(text="ТРОЛЛИНГ: STEAM СООБЩЕНИЕ (ШАУРМА) 🎮", fg="#66c0f4")
-        elif command == "WATERMARK_ON":
-            self.troll_header.config(text="ТРОЛЛИНГ: ВОДЯНОЙ ЗНАК WINDOWS 🪟", fg=self.accent_on)
-        elif command == "WATERMARK_OFF":
-            self.troll_header.config(text="7. СИСТЕМНЫЙ ТРОЛЛИНГ & ОБМАНКИ 🪟", fg=self.text_color)
-        elif command in ("TROLL:KNOCK", "TROLL_KNOCK"):
-            self.troll_header.config(text="ТРОЛЛИНГ: 3D СТУК В ДВЕРЬ 🚪", fg="#fab387")
-        elif command in ("TROLL:MOSQUITO:1", "MOSQUITO_1"):
-            self.troll_header.config(text="ТРОЛЛИНГ: КОМАР (ЗВУК 1) 🦟", fg="#a6e3a1")
-        elif command in ("TROLL:MOSQUITO:2", "MOSQUITO_2"):
-            self.troll_header.config(text="ТРОЛЛИНГ: КОМАР (ЗВУК 2) 🦟", fg="#f9e2af")
-        elif command in ("TROLL:MOSQUITO:3", "MOSQUITO_3"):
-            self.troll_header.config(text="ТРОЛЛИНГ: КОМАР (ЗВУК 3) 🦟", fg="#fab387")
-        elif command in ("TROLL:MOSQUITO:STOP", "MOSQUITO_STOP"):
-            self.troll_header.config(text="ТРОЛЛИНГ: КОМАР ОСТАНОВЛЕН ⏹️", fg=self.accent_off)
-        elif command in ("TROLL:GPU_CRASH", "TROLL_GPU_CRASH"):
-            self.troll_header.config(text="ТРОЛЛИНГ: СБОЙ ВИДЕОДРАЙВЕРА 🔌", fg="#76b900")
-        elif command == "FLY_ON":
-            self.troll_header.config(text="ТРОЛЛИНГ: МУХА НА МОНИТОРЕ 🪰", fg=self.accent_on)
-        elif command == "FLY_OFF":
-            self.troll_header.config(text="7. СИСТЕМНЫЙ ТРОЛЛИНГ & ОБМАНКИ 🪟", fg=self.text_color)
-        elif command == "BUSY_CURSOR_ON":
-            self.busy_cursor_header.config(text="КОЛЁСИКО ЗАГРУЗКИ (ВКЛЮЧЕНО 🟢)", fg=self.accent_on)
-        elif command == "BUSY_CURSOR_OFF":
-            self.busy_cursor_header.config(text="КОЛЁСИКО ЗАГРУЗКИ (BUSY CURSOR ⏳)", fg=self.text_color)
-        elif command == "CS_CHAOS_ON":
-            self.vis_header.config(text="ХАОС НОТ: ГИГАНТИЗМ VS МИКРО 🟢", fg=self.accent_on)
-        elif command == "CS_CHAOS_OFF":
-            self.vis_header.config(text="ВИЗУАЛЬНЫЙ АД & ХАОС НОТ (ФАЗА 5) 👁️", fg=self.text_color)
-        elif command == "MOSAIC_ON":
-            self.vis_header.config(text="ВИЗУАЛЬНЫЙ АД: 144p МОЗАИКА 🟢", fg="#89dceb")
-        elif command == "MOSAIC_OFF":
-            self.vis_header.config(text="ВИЗУАЛЬНЫЙ АД & ХАОС НОТ (ФАЗА 5) 👁️", fg=self.text_color)
-        elif command == "INVERT_COLORS_ON":
-            self.vis_header.config(text="ВИЗУАЛЬНЫЙ АД: НЕГАТИВ / ИНВЕРСИЯ 🟢", fg="#f9e2af")
-        elif command == "INVERT_COLORS_OFF":
-            self.vis_header.config(text="ВИЗУАЛЬНЫЙ АД & ХАОС НОТ (ФАЗА 5) 👁️", fg=self.text_color)
-        elif command == "BARREL_ROLL":
-            self.cam_header.config(text="КАМЕРА: БОЧКА 360° 🔄", fg="#cba6f7")
-        elif command.startswith("SET_FPS:"):
-            fps_val = command.split(":")[1]
-            txt = "СБРОС FPS (БЕЗ ОГРАНИЧЕНИЙ)" if fps_val == "0" else f"FPS ОГРАНИЧЕН: {fps_val} FPS"
-            self.cam_header.config(text=f"КАМЕРА: {txt} ⏱️", fg="#fab387")
-
-        elif command == "TAPE_STOP":
-            self.audio_header.config(text="ЗВУК: ЗАЖЕВАЛО ПЛЕНКУ / TAPE STOP 🛑", fg="#fab387")
-        elif command == "REVERB_ON":
-            self.lbl_reverb.config(text="Эхо в соборе: ВКЛ ⛪", fg=self.accent_on)
-        elif command == "REVERB_OFF":
-            self.lbl_reverb.config(text="Эхо в соборе (Reverb):", fg=self.text_color)
-
+    # =========================================================================
+    # ЛОГИКА ОТПРАВКИ КОМАНД, ЗАДЕРЖКИ И СЕТИ
+    # =========================================================================
     def is_delayable_event(self, command: str) -> bool:
         cmd_upper = command.upper()
         if any(cmd_upper.startswith(prefix) for prefix in [
@@ -1217,21 +1514,21 @@ class ModernControlPanel:
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 s.settimeout(0.5)
                 s.connect((ip, 9000))
-                s.send(command.encode('utf-8'))
+                s.send(command.encode("utf-8"))
                 s.close()
-                self.root.after(0, lambda: self.status_label.config(text=f"Успех: Отправлено '{command}'", fg=self.accent_off))
-                self.root.after(0, lambda: self.update_ui_state(command))
-            except Exception:
-                self.root.after(0, lambda: self.status_label.config(text=f"Ошибка сети: проверьте запуск osu! и IP", fg=self.accent_on))
+                self.root.after(0, lambda: self._on_send_success(command))
+            except Exception as ex:
+                self.root.after(0, lambda: self._on_send_failure(command, str(ex)))
         threading.Thread(target=task, daemon=True).start()
 
-    def cancel_countdown(self):
-        if self._countdown_job is not None:
-            self.root.after_cancel(self._countdown_job)
-            self._countdown_job = None
-        if hasattr(self, 'countdown_banner') and self.countdown_banner.winfo_ismapped():
-            self.countdown_banner.pack_forget()
-        self.status_label.config(text="Запуск ивента отменен", fg=self.text_color)
+    def _on_send_success(self, command: str):
+        self.status_label.config(text=f"✔ Отправлено: '{command}'", fg=self.accent_green)
+        self.update_ui_state(command)
+        self._set_ping_status(True)
+
+    def _on_send_failure(self, command: str, err: str):
+        self.status_label.config(text=f"✖ Ошибка отправки '{command}': проверьте запуск osu! и IP", fg=self.accent_red)
+        self._set_ping_status(False)
 
     def send_command(self, command: str, force_instant: bool = False):
         if force_instant or not self.event_delay_enabled.get() or self.is_continuous_or_slider_cmd(command):
@@ -1246,71 +1543,265 @@ class ModernControlPanel:
             self._execute_send(command)
             return
 
-        # Cancel previous active countdown if any
         if self._countdown_job is not None:
             self.root.after_cancel(self._countdown_job)
             self._countdown_job = None
 
         delay = float(self.event_delay_seconds.get())
-        end_time = time.time() + delay
-        self._show_countdown(command, end_time)
+        self._countdown_end_time = time.time() + delay
+        self._countdown_cmd = command
+        self._show_countdown(delay)
 
-    def _show_countdown(self, command: str, end_time: float):
-        remaining = max(0.0, end_time - time.time())
+    def _show_countdown(self, total_delay: float):
+        remaining = max(0.0, self._countdown_end_time - time.time())
         if remaining <= 0.05:
-            if hasattr(self, 'countdown_banner') and self.countdown_banner.winfo_ismapped():
+            if self.countdown_banner.winfo_ismapped():
                 self.countdown_banner.pack_forget()
             self._countdown_job = None
-            self._execute_send(command)
+            self._execute_send(self._countdown_cmd)
             return
 
-        display_cmd = command
+        display_cmd = self._countdown_cmd
         if len(display_cmd) > 28:
             display_cmd = display_cmd[:25] + "..."
 
         self.countdown_lbl.config(text=f"⏳ [{remaining:.1f}с] Переключитесь в osu! Запуск '{display_cmd}'")
+
+        progress_ratio = max(0.0, min(1.0, 1.0 - (remaining / max(0.1, total_delay))))
+        canvas_w = self.countdown_canvas.winfo_width()
+        if canvas_w < 50:
+            canvas_w = 480
+        self.countdown_canvas.delete("all")
+        self.countdown_canvas.create_rectangle(0, 0, int(canvas_w * progress_ratio), 4, fill=self.accent_yellow, width=0)
+
         if not self.countdown_banner.winfo_ismapped():
-            self.countdown_banner.pack(side=tk.BOTTOM, fill=tk.X, padx=20, pady=(0, 4), before=self.status_label)
+            self.countdown_banner.pack(fill=tk.X, padx=16, pady=(0, 6), before=self.notebook)
 
         self.status_label.config(text=f"⏳ Переключитесь в окно osu! (до старта {remaining:.1f} сек)", fg=self.accent_yellow)
-        self._countdown_job = self.root.after(100, lambda: self._show_countdown(command, end_time))
+        self._countdown_job = self.root.after(80, lambda: self._show_countdown(total_delay))
 
-    def _update_delay_badge(self):
-        if hasattr(self, 'delay_badge'):
-            if self.event_delay_enabled.get():
-                sec = self.event_delay_seconds.get()
-                sec_str = f"{int(sec)}с" if sec.is_integer() else f"{sec:.1f}с"
-                self.delay_badge.config(text=f"⏱️ {sec_str}", fg=self.accent_yellow)
-            else:
-                self.delay_badge.config(text="⏱️ ВЫКЛ", fg="#a6adc8")
+    def cancel_countdown(self):
+        if self._countdown_job is not None:
+            self.root.after_cancel(self._countdown_job)
+            self._countdown_job = None
+        if self.countdown_banner.winfo_ismapped():
+            self.countdown_banner.pack_forget()
+        self.status_label.config(text="Запуск ивента отменен", fg=self.text_color)
 
-    def _on_delay_scale_move(self, val):
-        sec = round(float(val) * 2) / 2
-        self.event_delay_seconds.set(sec)
-        if hasattr(self, 'delay_lbl_var'):
-            self.delay_lbl_var.set(f"Задержка: {sec:.1f} сек")
-        self._update_delay_badge()
+    # =========================================================================
+    # СБРОСИТЬ ВСЁ (RESET ALL / PANIC BUTTON)
+    # =========================================================================
+    def reset_all_debuffs(self):
+        self.cancel_countdown()
+        self.status_label.config(text="🚨 ЭКСТРЕННЫЙ СБРОС ВСЕХ ДЕБАФФОВ...", fg=self.accent_yellow)
 
-    def _set_delay_preset(self, sec):
-        self.event_delay_seconds.set(sec)
-        if hasattr(self, 'delay_scale'):
-            self.delay_scale.set(sec)
-        if hasattr(self, 'delay_lbl_var'):
-            self.delay_lbl_var.set(f"Задержка: {sec:.1f} сек")
-        self._update_delay_badge()
+        commands_to_reset = [
+            "CHAOS_OFF", "WIND_OFF", "MAGNET_OFF", "BLACK_HOLE_OFF",
+            "GRAVITY_OFF", "SCALE:1.00", "HUD_SCALE:1.00", "SPEED:1.00", "PITCH_OFF",
+            "REPULSION_OFF", "JITTER:0", "INPUT_LAG:0", "CLONES_OFF", "HIDE_CURSOR:OFF",
+            "BUSY_CURSOR_OFF", "CURSOR_SCALE:1.00", "INVERT_RESET", "JAM_RESET",
+            "DRUNK_OFF", "CAROUSEL_OFF", "SET_FPS:0", "CS_CHAOS_OFF", "MOSAIC_OFF",
+            "INVERT_COLORS_OFF", "TUNNEL_OFF", "GHOST_SLIDERS_OFF", "AUDIO_DESYNC:0",
+            "CHAMELEON_OFF", "MIRROR_PLAYFIELD_X_OFF", "MIRROR_PLAYFIELD_Y_OFF",
+            "MIRROR_HUD_X_OFF", "MUFFLED_OFF", "PAN_SPIN_OFF", "REVERB_OFF",
+            "BASS_BOOST_OFF", "EARTHQUAKE_OFF", "HIDDEN_OFF", "FREEZE_OFF",
+            "WATERMARK_OFF", "FLY_OFF", "TROLL:MOSQUITO:STOP"
+        ]
 
-    def _on_delay_settings_changed(self):
-        self._update_delay_badge()
+        for k in self.toggle_states:
+            self.update_toggle_visual(k, False)
 
+        self.btn_inv_x.config(text="⚪ НОРМА X", bg=self.surface1, fg=self.text_color)
+        self.btn_inv_y.config(text="⚪ НОРМА Y", bg=self.surface1, fg=self.text_color)
+        self.btn_jam_k1.config(text="⚪ РАБОТАЕТ", bg=self.surface1, fg=self.text_color)
+        self.btn_jam_k2.config(text="⚪ РАБОТАЕТ", bg=self.surface1, fg=self.text_color)
+
+        if hasattr(self, "jit_scale"): self.jit_scale.set(0)
+        if hasattr(self, "lag_scale"): self.lag_scale.set(0)
+        if hasattr(self, "cscale_slider"): self.cscale_slider.set(1.0)
+        if hasattr(self, "bh_scale"): self.bh_scale.set(1.0)
+        if hasattr(self, "fps_scale"): self.fps_scale.set(60)
+        if hasattr(self, "desync_scale"): self.desync_scale.set(0)
+
+        ip = self.ip_entry.get().strip()
+        def _send_all():
+            try:
+                for cmd in commands_to_reset:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.settimeout(0.3)
+                    s.connect((ip, 9000))
+                    s.send(cmd.encode("utf-8"))
+                    s.close()
+                    time.sleep(0.01)
+                self.root.after(0, lambda: self.status_label.config(text="✔ Все дебаффы успешно сброшены в норму!", fg=self.accent_green))
+            except Exception as ex:
+                self.root.after(0, lambda: self.status_label.config(text=f"✖ Ошибка сброса: {ex}", fg=self.accent_red))
+
+        threading.Thread(target=_send_all, daemon=True).start()
+
+    # =========================================================================
+    # ФОНОВЫЙ ПИНГ СОКЕТА OSU!
+    # =========================================================================
+    def start_ping_thread(self):
+        def _worker():
+            while not self._stop_ping.is_set():
+                ip = self.ip_entry.get().strip()
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.settimeout(0.3)
+                    s.connect((ip, 9000))
+                    s.close()
+                    self.root.after(0, lambda: self._set_ping_status(True))
+                except Exception:
+                    self.root.after(0, lambda: self._set_ping_status(False))
+                time.sleep(2.5)
+
+        t = threading.Thread(target=_worker, daemon=True)
+        t.start()
+
+    def check_connection_now(self):
+        self.ping_indicator.config(text="● ПРОВЕРКА...", fg=self.accent_yellow)
+        ip = self.ip_entry.get().strip()
+        def _check():
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(0.4)
+                s.connect((ip, 9000))
+                s.close()
+                self.root.after(0, lambda: self._set_ping_status(True))
+            except Exception:
+                self.root.after(0, lambda: self._set_ping_status(False))
+        threading.Thread(target=_check, daemon=True).start()
+
+    def _set_ping_status(self, connected: bool):
+        self.is_connected = connected
+        if connected:
+            self.ping_indicator.config(text="● ОНЛАЙН (osu! найден)", fg=self.accent_green)
+        else:
+            self.ping_indicator.config(text="● НЕ В СЕТИ (запустите мод в osu!)", fg=self.accent_red)
+
+    # =========================================================================
+    # ОБНОВЛЕНИЕ СОСТОЯНИЙ UI
+    # =========================================================================
+    def update_ui_state(self, command: str):
+        cmd_map = {
+            "CHAOS_ON": ("CHAOS", True), "CHAOS_OFF": ("CHAOS", False),
+            "WIND_ON": ("WIND", True), "WIND_OFF": ("WIND", False),
+            "MAGNET_ON": ("MAGNET", True), "MAGNET_OFF": ("MAGNET", False),
+            "BLACK_HOLE_ON": ("BLACK_HOLE", True), "BLACK_HOLE_OFF": ("BLACK_HOLE", False),
+            "GRAVITY_ON": ("GRAVITY", True), "GRAVITY_OFF": ("GRAVITY", False),
+            "REPULSION_ON": ("REPULSION", True), "REPULSION_OFF": ("REPULSION", False),
+            "CLONES_ON": ("CLONES", True), "CLONES_OFF": ("CLONES", False),
+            "HIDE_CURSOR:ON": ("HIDE_CURSOR", True), "HIDE_CURSOR:OFF": ("HIDE_CURSOR", False),
+            "BUSY_CURSOR_ON": ("BUSY_CURSOR", True), "BUSY_CURSOR_OFF": ("BUSY_CURSOR", False),
+            "DRUNK_ON": ("DRUNK", True), "DRUNK_OFF": ("DRUNK", False),
+            "CAROUSEL_ON": ("CAROUSEL", True), "CAROUSEL_OFF": ("CAROUSEL", False),
+            "CS_CHAOS_ON": ("CS_CHAOS", True), "CS_CHAOS_OFF": ("CS_CHAOS", False),
+            "MOSAIC_ON": ("MOSAIC", True), "MOSAIC_OFF": ("MOSAIC", False),
+            "INVERT_COLORS_ON": ("INVERT_COLORS", True), "INVERT_COLORS_OFF": ("INVERT_COLORS", False),
+            "TUNNEL_ON": ("TUNNEL", True), "TUNNEL_OFF": ("TUNNEL", False),
+            "GHOST_SLIDERS_ON": ("GHOST_SLIDERS", True), "GHOST_SLIDERS_OFF": ("GHOST_SLIDERS", False),
+            "MUFFLED_ON": ("MUFFLED", True), "MUFFLED_OFF": ("MUFFLED", False),
+            "PAN_SPIN_ON": ("PAN_SPIN", True), "PAN_SPIN_OFF": ("PAN_SPIN", False),
+            "REVERB_ON": ("REVERB", True), "REVERB_OFF": ("REVERB", False),
+            "BASS_BOOST_ON": ("BASS_BOOST", True), "BASS_BOOST_OFF": ("BASS_BOOST", False),
+            "EARTHQUAKE_ON": ("EARTHQUAKE", True), "EARTHQUAKE_OFF": ("EARTHQUAKE", False),
+            "HIDDEN_ON": ("HIDDEN", True), "HIDDEN_OFF": ("HIDDEN", False),
+            "FREEZE_ON": ("FREEZE", True), "FREEZE_OFF": ("FREEZE", False),
+            "WATERMARK_ON": ("WATERMARK", True), "WATERMARK_OFF": ("WATERMARK", False),
+            "FLY_ON": ("FLY", True), "FLY_OFF": ("FLY", False),
+            "MIRROR_PLAYFIELD_X_ON": ("MIRROR_PF_X", True), "MIRROR_PLAYFIELD_X_OFF": ("MIRROR_PF_X", False),
+            "MIRROR_PLAYFIELD_Y_ON": ("MIRROR_PF_Y", True), "MIRROR_PLAYFIELD_Y_OFF": ("MIRROR_PF_Y", False),
+            "MIRROR_HUD_X_ON": ("MIRROR_HUD_X", True), "MIRROR_HUD_X_OFF": ("MIRROR_HUD_X", False),
+        }
+
+        if command in cmd_map:
+            key, state = cmd_map[command]
+            self.update_toggle_visual(key, state)
+            return
+
+        if command == "INVERT_X_ON":
+            self.toggle_states["INVERT_X"] = True
+            self.btn_inv_x.config(text="🟢 ИНВЕРСИЯ X", bg=self.accent_peach, fg=self.accent_dark)
+        elif command == "INVERT_X_OFF":
+            self.toggle_states["INVERT_X"] = False
+            self.btn_inv_x.config(text="⚪ НОРМА X", bg=self.surface1, fg=self.text_color)
+        elif command == "INVERT_Y_ON":
+            self.toggle_states["INVERT_Y"] = True
+            self.btn_inv_y.config(text="🟢 ИНВЕРСИЯ Y", bg=self.accent_peach, fg=self.accent_dark)
+        elif command == "INVERT_Y_OFF":
+            self.toggle_states["INVERT_Y"] = False
+            self.btn_inv_y.config(text="⚪ НОРМА Y", bg=self.surface1, fg=self.text_color)
+        elif command == "INVERT_RESET":
+            self.toggle_states["INVERT_X"] = False
+            self.toggle_states["INVERT_Y"] = False
+            self.btn_inv_x.config(text="⚪ НОРМА X", bg=self.surface1, fg=self.text_color)
+            self.btn_inv_y.config(text="⚪ НОРМА Y", bg=self.surface1, fg=self.text_color)
+
+        elif command == "JAM_K1_ON":
+            self.toggle_states["JAM_K1"] = True
+            self.btn_jam_k1.config(text="⛔ ЗАЛИПЛА", bg=self.accent_red, fg=self.accent_dark)
+        elif command == "JAM_K1_OFF":
+            self.toggle_states["JAM_K1"] = False
+            self.btn_jam_k1.config(text="⚪ РАБОТАЕТ", bg=self.surface1, fg=self.text_color)
+        elif command == "JAM_K2_ON":
+            self.toggle_states["JAM_K2"] = True
+            self.btn_jam_k2.config(text="⛔ ЗАЛИПЛА", bg=self.accent_red, fg=self.accent_dark)
+        elif command == "JAM_K2_OFF":
+            self.toggle_states["JAM_K2"] = False
+            self.btn_jam_k2.config(text="⚪ РАБОТАЕТ", bg=self.surface1, fg=self.text_color)
+        elif command == "JAM_RESET":
+            self.toggle_states["JAM_K1"] = False
+            self.toggle_states["JAM_K2"] = False
+            self.btn_jam_k1.config(text="⚪ РАБОТАЕТ", bg=self.surface1, fg=self.text_color)
+            self.btn_jam_k2.config(text="⚪ РАБОТАЕТ", bg=self.surface1, fg=self.text_color)
+
+    def toggle_inv_x(self):
+        st = self.toggle_states.get("INVERT_X", False)
+        self.send_command("INVERT_X_OFF" if st else "INVERT_X_ON")
+
+    def toggle_inv_y(self):
+        st = self.toggle_states.get("INVERT_Y", False)
+        self.send_command("INVERT_Y_OFF" if st else "INVERT_Y_ON")
+
+    def invert_both(self):
+        self.send_command("INVERT_X_ON")
+        self.send_command("INVERT_Y_ON")
+
+    def invert_reset(self):
+        self.send_command("INVERT_RESET")
+
+    def toggle_jam_k1(self):
+        st = self.toggle_states.get("JAM_K1", False)
+        self.send_command("JAM_K1_OFF" if st else "JAM_K1_ON")
+
+    def toggle_jam_k2(self):
+        st = self.toggle_states.get("JAM_K2", False)
+        self.send_command("JAM_K2_OFF" if st else "JAM_K2_ON")
+
+    def jam_reset(self):
+        self.send_command("JAM_RESET")
+
+    def on_cs_min_slider(self, val):
+        self.cs_min_val = float(val)
+        self.send_command(f"CS_CHAOS_MIN:{self.cs_min_val:.2f}")
+
+    def on_cs_max_slider(self, val):
+        self.cs_max_val = float(val)
+        self.send_command(f"CS_CHAOS_MAX:{self.cs_max_val:.2f}")
+
+    # =========================================================================
+    # ОКНО НАСТРОЕК (ЗАДЕРЖКА ВЫЗОВА ИВЕНТОВ)
+    # =========================================================================
     def open_settings(self):
-        if hasattr(self, 'settings_win') and self.settings_win and self.settings_win.winfo_exists():
+        if hasattr(self, "settings_win") and self.settings_win and self.settings_win.winfo_exists():
             self.settings_win.lift()
             self.settings_win.focus_force()
             return
 
         self.settings_win = tk.Toplevel(self.root)
-        self.settings_win.title("Настройки osu! Chaos Remote")
-        self.settings_win.geometry("460x520")
+        self.settings_win.title("Настройки панели")
+        self.settings_win.geometry("440x480")
         self.settings_win.configure(bg=self.bg_color)
         self.settings_win.resizable(False, False)
         self.settings_win.attributes("-topmost", True)
@@ -1323,104 +1814,91 @@ class ModernControlPanel:
         except Exception:
             pass
 
-        tk.Label(self.settings_win, text="⚙️ НАСТРОЙКИ ПАНЕЛИ", font=("Segoe UI", 14, "bold"), bg=self.bg_color, fg=self.accent_blue).pack(pady=(16, 10))
+        tk.Label(
+            self.settings_win,
+            text="⚙️ НАСТРОЙКИ ЗАДЕРЖКИ (АЛЬТ-ТАБ)",
+            font=("Segoe UI", 12, "bold"),
+            bg=self.bg_color,
+            fg=self.accent_blue
+        ).pack(pady=(16, 8))
 
-        # Карточка 1: Задержка вызова ивентов (Альт-Таб)
-        card1 = tk.Frame(self.settings_win, bg=self.panel_color, padx=16, pady=14)
-        card1.pack(fill=tk.X, padx=16, pady=6)
+        card = tk.Frame(self.settings_win, bg=self.card_color, padx=16, pady=12)
+        card.pack(fill=tk.X, padx=16, pady=6)
 
-        tk.Label(card1, text="⏱️ ЗАДЕРЖКА ВЫЗОВА ИВЕНТОВ (АЛЬТ-ТАБ ТАЙМЕР)", font=("Segoe UI", 10, "bold"), bg=self.panel_color, fg=self.accent_yellow).pack(anchor=tk.W, pady=(0, 6))
-        tk.Label(card1, text="Даёт время переключиться на окно osu!, чтобы игра не вставала на паузу из-за потери фокуса Windows.", font=("Segoe UI", 8), bg=self.panel_color, fg="#a6adc8", wraplength=400, justify=tk.LEFT).pack(anchor=tk.W, pady=(0, 10))
+        tk.Label(
+            card,
+            text="Дает время переключиться на окно osu!, чтобы игра не уходила в паузу от потери фокуса Windows.",
+            font=("Segoe UI", 8),
+            bg=self.card_color,
+            fg=self.text_dim,
+            wraplength=380,
+            justify=tk.LEFT
+        ).pack(anchor=tk.W, pady=(0, 8))
 
         chk = tk.Checkbutton(
-            card1,
-            text="Включить обратный отсчёт перед запуском ивентов",
+            card,
+            text="Включить обратный отсчет перед ивентами",
             variable=self.event_delay_enabled,
             font=("Segoe UI", 9, "bold"),
-            bg=self.panel_color,
+            bg=self.card_color,
             fg=self.text_color,
             selectcolor=self.bg_color,
-            activebackground=self.panel_color,
+            activebackground=self.card_color,
             activeforeground=self.text_color,
-            command=self._on_delay_settings_changed
+            command=self._update_delay_badge
         )
-        chk.pack(anchor=tk.W, pady=(0, 8))
+        chk.pack(anchor=tk.W, pady=(0, 6))
 
-        slider_frame = tk.Frame(card1, bg=self.panel_color)
-        slider_frame.pack(fill=tk.X, pady=(0, 6))
+        self.settings_delay_lbl = tk.Label(
+            card,
+            text=f"Задержка: {self.event_delay_seconds.get():.1f} сек",
+            font=("Segoe UI", 9, "bold"),
+            bg=self.card_color,
+            fg=self.accent_yellow
+        )
+        self.settings_delay_lbl.pack(anchor=tk.W)
 
-        self.delay_lbl_var = tk.StringVar(value=f"Задержка: {self.event_delay_seconds.get():.1f} сек")
-        tk.Label(slider_frame, textvariable=self.delay_lbl_var, font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.accent_yellow).pack(anchor=tk.W)
-
-        self.delay_scale = ttk.Scale(
-            card1,
+        scale = ttk.Scale(
+            card,
             from_=1.0,
             to=10.0,
             value=self.event_delay_seconds.get(),
-            command=self._on_delay_scale_move
+            command=self._on_settings_scale_move
         )
-        self.delay_scale.pack(fill=tk.X, pady=(0, 8))
+        scale.pack(fill=tk.X, pady=(4, 8))
 
-        presets_frame = tk.Frame(card1, bg=self.panel_color)
-        presets_frame.pack(fill=tk.X, pady=(0, 12))
-        tk.Label(presets_frame, text="Пресеты:", font=("Segoe UI", 8), bg=self.panel_color, fg="#a6adc8").pack(side=tk.LEFT, padx=(0, 8))
-
+        p_row = tk.Frame(card, bg=self.card_color)
+        p_row.pack(fill=tk.X, pady=(0, 8))
         for sec in [1.0, 2.0, 3.0, 5.0]:
-            btn_text = f"{int(sec)} сек ⭐" if sec == 3.0 else f"{int(sec)} сек"
+            btn_txt = f"{int(sec)}с ⭐" if sec == 3.0 else f"{int(sec)}с"
             tk.Button(
-                presets_frame,
-                text=btn_text,
-                font=("Segoe UI", 8, "bold"),
-                bg="#45475a" if sec != 3.0 else self.accent_blue,
-                fg="#11111b" if sec == 3.0 else "#cdd6f4",
-                bd=0,
-                padx=6,
-                pady=2,
-                cursor="hand2",
-                command=lambda s=sec: self._set_delay_preset(s)
+                p_row, text=btn_txt, font=("Segoe UI", 8, "bold"),
+                bg=self.surface1 if sec != 3.0 else self.accent_blue,
+                fg=self.text_color if sec != 3.0 else self.accent_dark,
+                bd=0, padx=6, pady=2, cursor="hand2",
+                command=lambda s=sec, sc=scale: self._set_settings_preset(s, sc)
             ).pack(side=tk.LEFT, padx=3)
 
-        tk.Label(card1, text="Применять задержку к:", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.text_color).pack(anchor=tk.W, pady=(4, 4))
-
+        tk.Label(card, text="Применять задержку к:", font=("Segoe UI", 9, "bold"), bg=self.card_color, fg=self.text_color).pack(anchor=tk.W, pady=(6, 2))
         tk.Radiobutton(
-            card1,
-            text="Только к ивентам и пранкам (Каптча, BSOD, Срыв мыши...)",
-            variable=self.delay_scope,
-            value="events",
-            font=("Segoe UI", 8),
-            bg=self.panel_color,
-            fg=self.text_color,
-            selectcolor=self.bg_color,
-            activebackground=self.panel_color,
-            activeforeground=self.text_color,
-            command=self._on_delay_settings_changed
+            card, text="Только к ивентам и пранкам (Каптча, BSOD, Мышь...)",
+            variable=self.delay_scope, value="events", font=("Segoe UI", 8),
+            bg=self.card_color, fg=self.text_color, selectcolor=self.bg_color,
+            activebackground=self.card_color, activeforeground=self.text_color
         ).pack(anchor=tk.W)
-
         tk.Radiobutton(
-            card1,
-            text="Ко всем кнопкам команд",
-            variable=self.delay_scope,
-            value="all",
-            font=("Segoe UI", 8),
-            bg=self.panel_color,
-            fg=self.text_color,
-            selectcolor=self.bg_color,
-            activebackground=self.panel_color,
-            activeforeground=self.text_color,
-            command=self._on_delay_settings_changed
+            card, text="Ко всем действиям без исключения",
+            variable=self.delay_scope, value="all", font=("Segoe UI", 8),
+            bg=self.card_color, fg=self.text_color, selectcolor=self.bg_color,
+            activebackground=self.card_color, activeforeground=self.text_color
         ).pack(anchor=tk.W)
-
-        card2 = tk.Frame(self.settings_win, bg=self.panel_color, padx=16, pady=10)
-        card2.pack(fill=tk.X, padx=16, pady=6)
-        tk.Label(card2, text="💡 Совет по использованию:", font=("Segoe UI", 9, "bold"), bg=self.panel_color, fg=self.accent_off).pack(anchor=tk.W, pady=(0, 2))
-        tk.Label(card2, text="При нажатии кнопки ивента внизу появится таймер обратного отсчёта. Кликните по окну osu! за 3 секунды, и ивент сработает прямо во время активной игры!", font=("Segoe UI", 8), bg=self.panel_color, fg="#cdd6f4", wraplength=400, justify=tk.LEFT).pack(anchor=tk.W)
 
         tk.Button(
             self.settings_win,
             text="СОХРАНИТЬ И ЗАКРЫТЬ",
             font=("Segoe UI", 10, "bold"),
-            bg=self.accent_off,
-            fg="#11111b",
+            bg=self.accent_green,
+            fg=self.accent_dark,
             bd=0,
             padx=16,
             pady=8,
@@ -1428,60 +1906,62 @@ class ModernControlPanel:
             command=self.settings_win.destroy
         ).pack(pady=(12, 16))
 
-    def set_fps_target(self, fps):
-        if fps <= 0:
-            self.fps_status_lbl.config(text="Без ограничений", fg=self.accent_off)
-            self.send_command("SET_FPS:0")
-        else:
-            self.fps_status_lbl.config(text=f"{fps} FPS", fg=self.accent_earth)
-            self.fps_slider.set(fps)
-            self.send_command(f"SET_FPS:{fps}")
+    def _on_settings_scale_move(self, val):
+        sec = round(float(val) * 2) / 2
+        self.event_delay_seconds.set(sec)
+        if hasattr(self, "settings_delay_lbl") and self.settings_delay_lbl.winfo_exists():
+            self.settings_delay_lbl.config(text=f"Задержка: {sec:.1f} сек")
+        self._update_delay_badge()
 
-    def on_fps_slider_change(self, val):
-        fps_int = int(float(val))
-        self.fps_status_lbl.config(text=f"{fps_int} FPS (слайдер)", fg=self.accent_yellow)
+    def _set_settings_preset(self, sec: float, scale_widget):
+        self.event_delay_seconds.set(sec)
+        scale_widget.set(sec)
+        if hasattr(self, "settings_delay_lbl") and self.settings_delay_lbl.winfo_exists():
+            self.settings_delay_lbl.config(text=f"Задержка: {sec:.1f} сек")
+        self._update_delay_badge()
 
-    def apply_fps_slider(self):
-        fps_int = int(self.fps_slider.get())
-        self.set_fps_target(fps_int)
+    def _update_delay_badge(self):
+        if hasattr(self, "delay_badge"):
+            if self.event_delay_enabled.get():
+                sec = self.event_delay_seconds.get()
+                sec_str = f"{int(sec)}с" if sec.is_integer() else f"{sec:.1f}с"
+                self.delay_badge.config(text=f"⏱️ {sec_str}", fg=self.accent_yellow)
+            else:
+                self.delay_badge.config(text="⏱️ ВЫКЛ", fg=self.text_dim)
 
-    def on_cs_min_slider(self, val):
-        self.cs_min_val = float(val)
-        self._update_cs_range_ui()
-        self.send_command(f"CS_CHAOS_MIN:{self.cs_min_val:.2f}")
-
-    def on_cs_max_slider(self, val):
-        self.cs_max_val = float(val)
-        self._update_cs_range_ui()
-        self.send_command(f"CS_CHAOS_MAX:{self.cs_max_val:.2f}")
-
-    def set_cs_range(self, min_val, max_val):
-        self.cs_min_val = min_val
-        self.cs_max_val = max_val
-        self.cs_min_slider.set(min_val)
-        self.cs_max_slider.set(max_val)
-        self._update_cs_range_ui()
-        self.send_command(f"CS_CHAOS_RANGE:{min_val:.2f}:{max_val:.2f}")
-
-    def _update_cs_range_ui(self):
-        self.lbl_cs_range.config(text=f"Диапазон: Микро {self.cs_min_val:.2f}x  |  Гигантизм {self.cs_max_val:.2f}x")
-
-
-
+    # =========================================================================
+    # РАДАР: КЛИКИ И СПАВН НОТ
+    # =========================================================================
     def on_radar_click(self, event):
         x = event.x
         y = event.y
-        if 0 <= x <= 512 and 0 <= y <= 384:
-            self.send_command(f"FAKE_NOTE:{x}:{y}")
+        if 0 <= x <= 480 and 0 <= y <= 360:
+            osu_x = (x / 480.0) * 512.0
+            osu_y = (y / 360.0) * 384.0
+            self.send_command(f"FAKE_NOTE:{osu_x:.2f}:{osu_y:.2f}")
+
             r = 10
-            blip = self.radar_canvas.create_oval(x-r, y-r, x+r, y+r, outline=self.accent_blue, width=2)
-            self.root.after(300, lambda: self.radar_canvas.delete(blip))
+            blip = self.radar_canvas.create_oval(
+                x - r, y - r, x + r, y + r,
+                outline=self.accent_green, width=2, fill=self.surface1
+            )
+            self.root.after(350, lambda: self.radar_canvas.delete(blip))
 
     def spawn_random_note(self):
         import random
-        x = random.uniform(10, 502)
-        y = random.uniform(10, 374)
-        self.send_command(f"FAKE_NOTE:{x:.2f}:{y:.2f}")
+        osu_x = random.uniform(20, 492)
+        osu_y = random.uniform(20, 364)
+        self.send_command(f"FAKE_NOTE:{osu_x:.2f}:{osu_y:.2f}")
+
+        cx = (osu_x / 512.0) * 480.0
+        cy = (osu_y / 384.0) * 360.0
+        r = 10
+        blip = self.radar_canvas.create_oval(
+            cx - r, cy - r, cx + r, cy + r,
+            outline=self.accent_pink, width=2, fill=self.surface1
+        )
+        self.root.after(350, lambda: self.radar_canvas.delete(blip))
+
 
 if __name__ == "__main__":
     root = tk.Tk()
