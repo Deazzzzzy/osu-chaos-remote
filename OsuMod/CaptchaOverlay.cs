@@ -84,12 +84,31 @@ namespace osu.Game.Rulesets.Osu.Mods
                                             RelativeSizeAxes = Axes.Both,
                                             Colour = Colour4.FromHex("#313244")
                                         },
-                                        new OsuSpriteText
+                                        new FillFlowContainer
                                         {
+                                            AutoSizeAxes = Axes.Both,
+                                            Direction = FillDirection.Horizontal,
+                                            Spacing = new Vector2(6, 0),
                                             Padding = new MarginPadding { Horizontal = 14, Vertical = 5 },
-                                            Text = "⏸️ ИГРА ПРИОСТАНОВЛЕНА — РЕШИТЕ ЗАДАНИЕ ДЛЯ ПРОДОЛЖЕНИЯ",
-                                            Font = OsuFont.GetFont(size: 11, weight: FontWeight.Bold),
-                                            Colour = Colour4.FromHex("#fab387")
+                                            Children = new Drawable[]
+                                            {
+                                                new SpriteIcon
+                                                {
+                                                    Anchor = Anchor.CentreLeft,
+                                                    Origin = Anchor.CentreLeft,
+                                                    Icon = FontAwesome.Solid.Pause,
+                                                    Size = new Vector2(10),
+                                                    Colour = Colour4.FromHex("#fab387")
+                                                },
+                                                new OsuSpriteText
+                                                {
+                                                    Anchor = Anchor.CentreLeft,
+                                                    Origin = Anchor.CentreLeft,
+                                                    Text = "ИГРА ПРИОСТАНОВЛЕНА — РЕШИТЕ ЗАДАНИЕ ДЛЯ ПРОДОЛЖЕНИЯ",
+                                                    Font = OsuFont.GetFont(size: 11, weight: FontWeight.Bold),
+                                                    Colour = Colour4.FromHex("#fab387")
+                                                }
+                                            }
                                         }
                                     }
                                 },
@@ -412,23 +431,40 @@ namespace osu.Game.Rulesets.Osu.Mods
             });
 
             // 2x2 grid of options
-            var optionsGrid = new FillFlowContainer
-            {
-                RelativeSizeAxes = Axes.X,
-                AutoSizeAxes = Axes.Y,
-                Direction = FillDirection.Full,
-                Spacing = new Vector2(14, 14)
-            };
-
+            var buttonList = new List<CaptchaButton>();
             foreach (int val in answers)
             {
                 bool isCorrect = (val == answer);
-                optionsGrid.Add(new CaptchaButton(val.ToString(), () =>
+                buttonList.Add(new CaptchaButton(val.ToString(), () =>
                 {
                     if (isCorrect) handleSuccess();
                     else handleFailure();
                 }));
             }
+
+            var optionsGrid = new GridContainer
+            {
+                RelativeSizeAxes = Axes.X,
+                AutoSizeAxes = Axes.Y,
+                RowDimensions = new[]
+                {
+                    new Dimension(GridSizeMode.AutoSize),
+                    new Dimension(GridSizeMode.Absolute, 14),
+                    new Dimension(GridSizeMode.AutoSize),
+                },
+                ColumnDimensions = new[]
+                {
+                    new Dimension(GridSizeMode.Distributed),
+                    new Dimension(GridSizeMode.Absolute, 14),
+                    new Dimension(GridSizeMode.Distributed),
+                },
+                Content = new[]
+                {
+                    new Drawable[] { buttonList[0], new Container(), buttonList[1] },
+                    new Drawable[] { new Container(), new Container(), new Container() },
+                    new Drawable[] { buttonList[2], new Container(), buttonList[3] },
+                }
+            };
 
             flow.Add(optionsGrid);
             contentContainer.Child = flow;
@@ -586,22 +622,39 @@ namespace osu.Game.Rulesets.Osu.Mods
             });
 
             // 2x2 grid of buttons
-            var optionsGrid = new FillFlowContainer
-            {
-                RelativeSizeAxes = Axes.X,
-                AutoSizeAxes = Axes.Y,
-                Direction = FillDirection.Full,
-                Spacing = new Vector2(14, 14)
-            };
-
+            var buttonList = new List<CaptchaButton>();
             foreach (var (text, isCorrect) in answers)
             {
-                optionsGrid.Add(new CaptchaButton(text, () =>
+                buttonList.Add(new CaptchaButton(text, () =>
                 {
                     if (isCorrect) handleSuccess();
                     else handleFailure();
                 }));
             }
+
+            var optionsGrid = new GridContainer
+            {
+                RelativeSizeAxes = Axes.X,
+                AutoSizeAxes = Axes.Y,
+                RowDimensions = new[]
+                {
+                    new Dimension(GridSizeMode.AutoSize),
+                    new Dimension(GridSizeMode.Absolute, 14),
+                    new Dimension(GridSizeMode.AutoSize),
+                },
+                ColumnDimensions = new[]
+                {
+                    new Dimension(GridSizeMode.Distributed),
+                    new Dimension(GridSizeMode.Absolute, 14),
+                    new Dimension(GridSizeMode.Distributed),
+                },
+                Content = new[]
+                {
+                    new Drawable[] { buttonList[0], new Container(), buttonList[1] },
+                    new Drawable[] { new Container(), new Container(), new Container() },
+                    new Drawable[] { buttonList[2], new Container(), buttonList[3] },
+                }
+            };
 
             flow.Add(optionsGrid);
             contentContainer.Child = flow;
@@ -618,7 +671,7 @@ namespace osu.Game.Rulesets.Osu.Mods
         public CaptchaButton(string text, Action onClick)
         {
             Action = onClick;
-            Width = 280;
+            RelativeSizeAxes = Axes.X;
             Height = 58;
             Masking = true;
             CornerRadius = 10;
@@ -638,7 +691,9 @@ namespace osu.Game.Rulesets.Osu.Mods
                     Origin = Anchor.Centre,
                     Text = text,
                     Font = OsuFont.GetFont(size: 17, weight: FontWeight.Bold),
-                    Colour = Colour4.White
+                    Colour = Colour4.White,
+                    Truncate = true,
+                    MaxWidth = 260
                 }
             };
         }
