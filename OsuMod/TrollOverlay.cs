@@ -48,6 +48,7 @@ namespace osu.Game.Rulesets.Osu.Mods
         private Container windowsWatermarkContainer = null!;
         private Container invertColorsContainer = null!;
         private Container mosaicContainer = null!;
+        private CaptchaOverlay captchaOverlay = null!;
 
         private bool lastInvertColors;
         private bool lastMosaic;
@@ -130,6 +131,12 @@ namespace osu.Game.Rulesets.Osu.Mods
             gpuCrashContainer = createGpuCrashContainer();
             gpuDriverToast = createGpuDriverToast();
 
+            captchaOverlay = new CaptchaOverlay();
+            captchaOverlay.OnSolved += () =>
+            {
+                OsuModChaos.StartGameplayClock();
+            };
+
             var children = new List<Drawable>
             {
                 gpuCrashContainer,
@@ -147,6 +154,7 @@ namespace osu.Game.Rulesets.Osu.Mods
                 stickyKeysDialog,
                 windowsWatermarkContainer,
                 gpuDriverToast,
+                captchaOverlay,
             };
 
             try
@@ -1026,6 +1034,14 @@ namespace osu.Game.Rulesets.Osu.Mods
             gpuCrashTimer.Restart();
             IsGpuCrashActive = true;
         }
+
+        public void ShowCaptcha(string mode = "RANDOM")
+        {
+            OsuModChaos.StopGameplayClock();
+            captchaOverlay.ShowCaptcha(mode);
+        }
+
+        public bool IsCaptchaActive => captchaOverlay?.IsActive ?? false;
 
         public void SetBassBoost(bool active)
         {

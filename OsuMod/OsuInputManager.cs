@@ -97,22 +97,25 @@ namespace osu.Game.Rulesets.Osu
         private bool isSimulatingInput;
         private readonly Random inputRnd = new Random();
         private bool hadCustomModifier;
-        private long lastThrottleInputTime;
-        private Vector2? throttledInputPos;
+
+        private readonly System.Diagnostics.Stopwatch spinoutTimer = new System.Diagnostics.Stopwatch();
+        private Vector2 spinoutStartPos;
+        private Vector2 spinoutTargetCorner;
 
         protected override bool Handle(UIEvent e)
         {
             if (isSimulatingInput)
                 return base.Handle(e);
 
-            bool isFpsThrottle = OsuModChaos.IsFpsThrottleActive;
+            bool isSpinoutActive = spinoutTimer.IsRunning || OsuModChaos.TriggerMouseSpinout;
+
             bool customModifier = OsuModChaos.InputLagMilliseconds > 0
                                   || OsuModChaos.InvertX
                                   || OsuModChaos.InvertY
-                                  || isFpsThrottle
                                   || OsuModChaos.IsMouseDisconnected
                                   || OsuModChaos.CursorJitterStrength > 0
-                                  || OsuModChaos.IsCircleRepulsion;
+                                  || OsuModChaos.IsCircleRepulsion
+                                  || isSpinoutActive;
 
             if (e is MouseMoveEvent moveEvent)
             {
@@ -152,19 +155,51 @@ namespace osu.Game.Rulesets.Osu
         {
             base.Update();
 
+            if (OsuModChaos.TriggerMouseSpinout)
+            {
+                OsuModChaos.TriggerMouseSpinout = false;
+                spinoutTimer.Restart();
+                spinoutStartPos = lastRawMousePosition ?? ScreenSpaceDrawQuad.Centre;
+
+                float screenW = DrawWidth > 0 ? DrawWidth : 1366f;
+                float screenH = DrawHeight > 0 ? DrawHeight : 768f;
+
+                int c = inputRnd.Next(4);
+                spinoutTargetCorner = c switch
+                {
+                    0 => new Vector2(25, 25),
+                    1 => new Vector2(screenW - 25, 25),
+                    2 => new Vector2(25, screenH - 25),
+                    _ => new Vector2(screenW - 25, screenH - 25)
+                };
+
+                TrollOverlay.PlayWindowsSound("Windows Ding.wav");
+            }
+
+            bool isSpinout = spinoutTimer.IsRunning;
+            if (isSpinout)
+            {
+                float spinoutMs = (float)spinoutTimer.Elapsed.TotalMilliseconds;
+                const float spinoutDuration = 280f;
+                if (spinoutMs >= spinoutDuration)
+                {
+                    spinoutTimer.Stop();
+                    isSpinout = false;
+                }
+            }
+
             float lag = OsuModChaos.InputLagMilliseconds;
             bool invertActive = OsuModChaos.InvertX || OsuModChaos.InvertY;
             bool invertChanged = (lastInvertX != OsuModChaos.InvertX || lastInvertY != OsuModChaos.InvertY);
             lastInvertX = OsuModChaos.InvertX;
             lastInvertY = OsuModChaos.InvertY;
 
-            bool isFpsThrottle = OsuModChaos.IsFpsThrottleActive;
             bool customModifier = lag > 0
                                   || invertActive
-                                  || isFpsThrottle
                                   || OsuModChaos.IsMouseDisconnected
                                   || OsuModChaos.CursorJitterStrength > 0
-                                  || OsuModChaos.IsCircleRepulsion;
+                                  || OsuModChaos.IsCircleRepulsion
+                                  || isSpinout;
 
             if (OsuModChaos.IsMouseDisconnected)
             {
@@ -187,45 +222,49 @@ namespace osu.Game.Rulesets.Osu
 
                 Vector2 targetPos;
 
-                if (lag > 0)
+                if (isSpinout)
                 {
-                    targetPos = getLaggedPosition(lag, now);
-                }
-                else
-                {
-                    if (mouseHistory.Count > 0)
-                        mouseHistory.Clear();
-                    targetPos = lastRawMousePosition ?? ScreenSpaceDrawQuad.Centre;
-                }
+                    float spinoutMs = (float)spinoutTimer.Elapsed.TotalMilliseconds;
+                    const float spinoutDuration = 280f;
+                    float progress = Math.Clamp(spinoutMs / 85f, 0f, 1f);
+                    Vector2 flickPos = Vector2.Lerp(spinoutStartPos, spinoutTargetCorner, progress);
 
-                targetPos = applyInversion(targetPos);
-
-                if (OsuModChaos.IsCircleRepulsion)
-                {
-                    targetPos += OsuModChaos.CalculateRepulsionOffset(targetPos);
-                }
-
-                if (OsuModChaos.CursorJitterStrength > 0)
-                {
-                    float j = OsuModChaos.CursorJitterStrength;
-                    targetPos += new Vector2(
-                        (inputRnd.NextSingle() * 2f - 1f) * j,
-                        (inputRnd.NextSingle() * 2f - 1f) * j
+                    float jitter = (1f - (spinoutMs / spinoutDuration)) * 35f + 4f;
+                    flickPos += new Vector2(
+                        (inputRnd.NextSingle() * 2f - 1f) * jitter,
+                        (inputRnd.NextSingle() * 2f - 1f) * jitter
                     );
-                }
 
-                if (isFpsThrottle)
-                {
-                    if (now - lastThrottleInputTime >= 66.6 || !throttledInputPos.HasValue)
-                    {
-                        lastThrottleInputTime = now;
-                        throttledInputPos = targetPos;
-                    }
-                    targetPos = throttledInputPos.Value;
+                    targetPos = flickPos;
                 }
                 else
                 {
-                    throttledInputPos = null;
+                    if (lag > 0)
+                    {
+                        targetPos = getLaggedPosition(lag, now);
+                    }
+                    else
+                    {
+                        if (mouseHistory.Count > 0)
+                            mouseHistory.Clear();
+                        targetPos = lastRawMousePosition ?? ScreenSpaceDrawQuad.Centre;
+                    }
+
+                    targetPos = applyInversion(targetPos);
+
+                    if (OsuModChaos.IsCircleRepulsion)
+                    {
+                        targetPos += OsuModChaos.CalculateRepulsionOffset(targetPos);
+                    }
+
+                    if (OsuModChaos.CursorJitterStrength > 0)
+                    {
+                        float j = OsuModChaos.CursorJitterStrength;
+                        targetPos += new Vector2(
+                            (inputRnd.NextSingle() * 2f - 1f) * j,
+                            (inputRnd.NextSingle() * 2f - 1f) * j
+                        );
+                    }
                 }
 
                 isSimulatingInput = true;

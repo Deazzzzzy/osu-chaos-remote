@@ -762,7 +762,20 @@ class ModernControlPanel:
         # Ряд 1: Отключение мыши (Фаза 4)
         row_disconnect = tk.Frame(troll_frame, bg=self.panel_color)
         row_disconnect.pack(fill=tk.X, pady=2)
-        tk.Button(row_disconnect, text="🔌 ОТКЛЮЧЕНИЕ МЫШИ (1.8s + Звук извлечения) 🖱️", font=("Segoe UI", 9, "bold"), bg="#f38ba8", fg="#11111b", bd=0, command=lambda: self.send_command("DEVICE_DISCONNECT")).pack(fill=tk.X, expand=True, padx=2)
+        tk.Button(row_disconnect, text="🔌 ОТКЛЮЧЕНИЕ МЫШИ (1.8s + Звук извлечения) 🖱️", font=("Segoe UI", 9, "bold"), bg="#f38ba8", fg="#11111b", bd=0, command=lambda: self.send_command("DEVICE_DISCONNECT")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(row_disconnect, text="🌪️ СРЫВ СЕНСОРА МЫШИ (В УГОЛ) 🖱️", font=("Segoe UI", 9, "bold"), bg="#fab387", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:SPINOUT")).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
+
+        # Ряд 1.5: Интерактивная Каптча (Пауза геймплея)
+        row_captcha_main = tk.Frame(troll_frame, bg=self.panel_color)
+        row_captcha_main.pack(fill=tk.X, pady=2)
+        tk.Button(row_captcha_main, text="🧩 КАПТЧА / ЗАГАДКА (ПАУЗА ИГРЫ) ⏸️", font=("Segoe UI", 9, "bold"), bg="#a6e3a1", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:CAPTCHA")).pack(fill=tk.X, expand=True, padx=2)
+
+        row_captcha_modes = tk.Frame(troll_frame, bg=self.panel_color)
+        row_captcha_modes.pack(fill=tk.X, pady=2)
+        tk.Button(row_captcha_modes, text="🎲 Случайная", font=("Segoe UI", 8, "bold"), bg="#94e2d5", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:CAPTCHA:RANDOM")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
+        tk.Button(row_captcha_modes, text="➕ Математика", font=("Segoe UI", 8, "bold"), bg="#89b4fa", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:CAPTCHA:MATH")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
+        tk.Button(row_captcha_modes, text="🤖 reCAPTCHA", font=("Segoe UI", 8, "bold"), bg="#b4befe", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:CAPTCHA:RECAPTCHA")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
+        tk.Button(row_captcha_modes, text="🧠 Загадка osu!", font=("Segoe UI", 8, "bold"), bg="#cba6f7", fg="#11111b", bd=0, command=lambda: self.send_command("TROLL:CAPTCHA:TRIVIA")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=1)
 
         # Ряд 2: Экран обновления Windows (Фаза 4)
         row_update = tk.Frame(troll_frame, bg=self.panel_color)
@@ -1066,6 +1079,10 @@ class ModernControlPanel:
             self.cham_header.config(text="ХАМЕЛЕОН (МОНОХРОМНЫЙ 🟢)", fg="#a6adc8")
         elif command == "DEVICE_DISCONNECT":
             self.troll_header.config(text="ТРОЛЛИНГ: МЫШЬ ОТКЛЮЧЕНА 🔌", fg="#f38ba8")
+        elif command in ("TROLL:SPINOUT", "MOUSE_SPINOUT"):
+            self.troll_header.config(text="ТРОЛЛИНГ: СРЫВ СЕНСОРА МЫШИ 🌪️", fg="#fab387")
+        elif command.startswith("TROLL:CAPTCHA") or command.startswith("CAPTCHA"):
+            self.troll_header.config(text="ТРОЛЛИНГ: КАПТЧА (ПАУЗА ИГРЫ) 🧩", fg="#a6e3a1")
         elif command == "TROLL:UPDATE":
             self.troll_header.config(text="ТРОЛЛИНГ: ОБНОВЛЕНИЕ WINDOWS 🔄", fg="#89dceb")
         elif command == "TROLL:DONATE":

@@ -161,6 +161,9 @@ namespace osu.Game.Rulesets.Osu.Mods
         public static volatile bool TriggerTrollKnock = false;
         public static volatile int TriggerTrollMosquito = 0;
         public static volatile bool TriggerTrollGpuCrash = false;
+        public static volatile bool TriggerTrollCaptcha = false;
+        public static string CaptchaMode = "RANDOM";
+        public static volatile bool TriggerMouseSpinout = false;
         private FlyOverlay? flyOverlay;
 
         public static Playfield? CurrentPlayfield;
@@ -656,6 +659,20 @@ namespace osu.Game.Rulesets.Osu.Mods
                                 else if (msg == "CAROUSEL_OFF") IsCarouselActive = false;
                                 else if (msg == "GRAVITY_ON") IsGravityActive = true;
                                 else if (msg == "GRAVITY_OFF") IsGravityActive = false;
+                                else if (msg == "TROLL_CAPTCHA" || msg == "TROLL:CAPTCHA")
+                                {
+                                    TriggerTrollCaptcha = true;
+                                    CaptchaMode = "RANDOM";
+                                }
+                                else if (msg.StartsWith("TROLL:CAPTCHA:") || msg.StartsWith("CAPTCHA:"))
+                                {
+                                    TriggerTrollCaptcha = true;
+                                    CaptchaMode = msg.Substring(msg.LastIndexOf(':') + 1);
+                                }
+                                else if (msg == "TROLL_SPINOUT" || msg == "TROLL:SPINOUT" || msg == "MOUSE_SPINOUT")
+                                {
+                                    TriggerMouseSpinout = true;
+                                }
                             }
                         }
                     }
@@ -955,6 +972,11 @@ namespace osu.Game.Rulesets.Osu.Mods
                     trollOverlay.ShowGpuDriverCrash();
                     TriggerTrollGpuCrash = false;
                 }
+                if (TriggerTrollCaptcha)
+                {
+                    trollOverlay.ShowCaptcha(CaptchaMode);
+                    TriggerTrollCaptcha = false;
+                }
 
                 trollOverlay.SetBassBoost(IsBassBoostActive);
 
@@ -994,7 +1016,7 @@ namespace osu.Game.Rulesets.Osu.Mods
 
                 trollOverlay.SetMuffled(IsMuffledAudio);
 
-                bool isStopScreenActive = trollOverlay.IsBsodActive || trollOverlay.IsUpdateActive || trollOverlay.IsGpuCrashActive;
+                bool isStopScreenActive = trollOverlay.IsBsodActive || trollOverlay.IsUpdateActive || trollOverlay.IsGpuCrashActive || trollOverlay.IsCaptchaActive;
 
                 if (isStopScreenActive && !wasStopScreenActive)
                 {
@@ -1014,13 +1036,16 @@ namespace osu.Game.Rulesets.Osu.Mods
                         cachedHudOverlay.Alpha = 0f;
                     }
 
-                    if (GameplayCursorInstance != null)
+                    if (!trollOverlay.IsCaptchaActive)
                     {
-                        GameplayCursorInstance.ClearTransforms();
-                        GameplayCursorInstance.Alpha = 0f;
-                    }
+                        if (GameplayCursorInstance != null)
+                        {
+                            GameplayCursorInstance.ClearTransforms();
+                            GameplayCursorInstance.Alpha = 0f;
+                        }
 
-                    HiddenCursorOverlayInstance?.SetHidden(true);
+                        HiddenCursorOverlayInstance?.SetHidden(true);
+                    }
                     wasStopScreenActive = true;
                 }
                 else if (!isStopScreenActive && wasStopScreenActive)
@@ -1048,25 +1073,28 @@ namespace osu.Game.Rulesets.Osu.Mods
                 }
                 else if (isStopScreenActive)
                 {
-                    float stopScreenElapsed = trollOverlay.IsBsodActive ? trollOverlay.BsodElapsed
-                        : (trollOverlay.IsUpdateActive ? trollOverlay.UpdateElapsed : trollOverlay.GpuCrashElapsed);
-                    float holdDuration = trollOverlay.IsBsodActive ? 3000f
-                        : (trollOverlay.IsUpdateActive ? 3500f : 1300f);
-                    float fadeDuration = trollOverlay.IsGpuCrashActive ? 100f : 400f;
-                    if (stopScreenElapsed > holdDuration)
+                    if (!trollOverlay.IsCaptchaActive)
                     {
-                        float progress = Math.Clamp((stopScreenElapsed - holdDuration) / fadeDuration, 0f, 1f);
-                        if (cachedHudOverlay != null)
-                            cachedHudOverlay.Alpha = progress;
-                        if (GameplayCursorInstance != null)
-                            GameplayCursorInstance.Alpha = progress;
-                    }
-                    else
-                    {
-                        if (cachedHudOverlay != null)
-                            cachedHudOverlay.Alpha = 0f;
-                        if (GameplayCursorInstance != null)
-                            GameplayCursorInstance.Alpha = 0f;
+                        float stopScreenElapsed = trollOverlay.IsBsodActive ? trollOverlay.BsodElapsed
+                            : (trollOverlay.IsUpdateActive ? trollOverlay.UpdateElapsed : trollOverlay.GpuCrashElapsed);
+                        float holdDuration = trollOverlay.IsBsodActive ? 3000f
+                            : (trollOverlay.IsUpdateActive ? 3500f : 1300f);
+                        float fadeDuration = trollOverlay.IsGpuCrashActive ? 100f : 400f;
+                        if (stopScreenElapsed > holdDuration)
+                        {
+                            float progress = Math.Clamp((stopScreenElapsed - holdDuration) / fadeDuration, 0f, 1f);
+                            if (cachedHudOverlay != null)
+                                cachedHudOverlay.Alpha = progress;
+                            if (GameplayCursorInstance != null)
+                                GameplayCursorInstance.Alpha = progress;
+                        }
+                        else
+                        {
+                            if (cachedHudOverlay != null)
+                                cachedHudOverlay.Alpha = 0f;
+                            if (GameplayCursorInstance != null)
+                                GameplayCursorInstance.Alpha = 0f;
+                        }
                     }
                 }
             }
