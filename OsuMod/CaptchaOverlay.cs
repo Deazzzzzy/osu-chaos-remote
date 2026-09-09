@@ -685,14 +685,13 @@ namespace osu.Game.Rulesets.Osu.Mods
                     RelativeSizeAxes = Axes.Both,
                     Colour = Colour4.FromHex("#313244")
                 },
-                label = new OsuSpriteText
+                label = new TruncatingSpriteText
                 {
                     Anchor = Anchor.Centre,
                     Origin = Anchor.Centre,
                     Text = text,
                     Font = OsuFont.GetFont(size: 17, weight: FontWeight.Bold),
                     Colour = Colour4.White,
-                    Truncate = true,
                     MaxWidth = 260
                 }
             };
