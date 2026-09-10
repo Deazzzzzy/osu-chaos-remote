@@ -53,6 +53,8 @@ A fun interactive mod for **osu!lazer** that allows a second person (such as str
 - **⚡ GPU Artifacts / Matrix Glitch**: Sliced RGB horizontal displacement strips with Windows hardware failure sound.
 - **💻 Blue Screen of Death (BSOD)**: Fullscreen Windows BSOD (`CRITICAL_PROCESS_DIED`, `osu!.exe`) with clock stop for 3 seconds.
 - **📞 Discord Incoming Call**: Realistic Discord popup with avatar, vibration, and accept/decline buttons (or audio-only mode).
+- **💬 Discord & Steam Audio-Only Notifications**: Authentic Discord message ping (`discord-notification.mp3`) and voice connected (`connected.mp3`) sounds, plus Steam message sound (`steam-.mp3`) without showing on-screen overlays.
+- **🎯 Dynamic Mouse Sensitivity Slider**: Real-time cursor sensitivity scaling from 0.10x to 4.00x with presets and instant reset, supporting both Raw Input and graphic tablets.
 - **🔋 Low Battery 5%**: Windows toast notification with system sound.
 - **🛡️ Windows Defender Threat**: System malware alert toast.
 - **⏳ Blackout (Time Freeze)**: Freeze hit objects for 5 seconds while audio keeps playing.

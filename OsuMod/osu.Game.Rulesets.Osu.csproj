@@ -59,5 +59,17 @@
     <None Include="Mods\3.mp3">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <EmbeddedResource Include="Mods\discord-notification.mp3">
+      <LogicalName>discord-notification.mp3</LogicalName>
+    </EmbeddedResource>
+    <None Include="Mods\discord-notification.mp3">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <EmbeddedResource Include="Mods\connected.mp3">
+      <LogicalName>connected.mp3</LogicalName>
+    </EmbeddedResource>
+    <None Include="Mods\connected.mp3">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 </Project>

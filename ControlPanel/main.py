@@ -392,7 +392,13 @@ class ModernControlPanel:
             ("Синий экран смерти (BSOD)", "TROLL:BSOD", "Пранк", self.accent_blue),
             ("Звонок Telegram (Мамуля)", "TROLL:TELEGRAM", "Пранк", self.accent_cyan),
             ("Звонок Discord", "TROLL:DISCORD", "Пранк", "#5865F2"),
+            ("Discord звук сообщения (Пинг)", "TROLL:DISCORD_NOTIF_AUDIO", "Звук", "#5865F2"),
+            ("Discord звук входа в войс", "TROLL:DISCORD_JOIN_AUDIO", "Звук", "#23a55a"),
             ("Steam сообщение (Шаурма)", "TROLL:STEAM", "Пранк", "#66c0f4"),
+            ("Steam звук сообщения (только звук)", "TROLL:STEAM_AUDIO", "Звук", "#66c0f4"),
+            ("Чувствительность 0.5x (Медленно)", "SENSITIVITY:0.50", "Курсор", self.accent_mauve),
+            ("Чувствительность 2.0x (Быстро)", "SENSITIVITY:2.00", "Курсор", self.accent_mauve),
+            ("Чувствительность 1.0x (Сброс)", "SENSITIVITY:1.00", "Курсор", self.accent_mauve),
             ("3D Стук в дверь (звук)", "TROLL:KNOCK", "Звук", self.accent_yellow),
             ("Писк комара (звук 1)", "TROLL:MOSQUITO:1", "Звук", self.accent_yellow),
             ("Донат от Папича (5000₽)", "TROLL:DONATE", "Пранк", self.accent_peach),
@@ -1037,7 +1043,22 @@ class ModernControlPanel:
                 command=lambda v=val: [self.cscale_slider.set(v), self.cscale_badge.config(text=f"{v:.2f}x"), self.send_command(f"CURSOR_SCALE:{v:.2f}")]
             ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
 
-        card_inv, _ = self.create_card(tab, "9. ИНВЕРСИЯ ОСЕЙ УПРАВЛЕНИЯ", "Разворачивает движение мыши по горизонтали и/или вертикали", self.accent_peach)
+        card_sens, _ = self.create_card(tab, "9. ЧУВСТВИТЕЛЬНОСТЬ МЫШИ (SENSITIVITY) 🎯", "Изменяет скорость перемещения курсора игрока в реальном времени", self.accent_mauve)
+        self.sens_slider, self.sens_badge = self.create_slider_row(
+            card_sens, "Чувствительность:", 0.1, 4.0, 1.0, "{:.2f}x",
+            lambda v: self.send_command(f"SENSITIVITY:{v:.2f}"), "SENSITIVITY:1.00"
+        )
+        sens_presets = tk.Frame(card_sens, bg=self.card_color)
+        sens_presets.pack(fill=tk.X, pady=(4, 0))
+        for txt, val in [("0.2x Улитка", 0.2), ("0.5x", 0.5), ("1.0x Норма", 1.0), ("1.5x", 1.5), ("2.5x Бешеная", 2.5)]:
+            tk.Button(
+                sens_presets, text=txt, font=("Segoe UI", 8, "bold"),
+                bg=self.surface1, fg=self.text_color, activebackground=self.accent_mauve,
+                activeforeground=self.accent_dark, bd=0, padx=4, pady=2, cursor="hand2",
+                command=lambda v=val: [self.sens_slider.set(v), self.sens_badge.config(text=f"{v:.2f}x"), self.send_command(f"SENSITIVITY:{v:.2f}")]
+            ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+
+        card_inv, _ = self.create_card(tab, "10. ИНВЕРСИЯ ОСЕЙ УПРАВЛЕНИЯ", "Разворачивает движение мыши по горизонтали и/или вертикали", self.accent_peach)
         row_ix = tk.Frame(card_inv, bg=self.card_color)
         row_ix.pack(fill=tk.X, pady=2)
         tk.Label(row_ix, text="Ось X (Горизонталь):", font=("Segoe UI", 9, "bold"), bg=self.card_color, fg=self.text_color, width=18, anchor=tk.W).pack(side=tk.LEFT)
@@ -1362,9 +1383,26 @@ class ModernControlPanel:
             command=lambda: self.send_command("TROLL:DISCORD_AUDIO")
         ).pack(side=tk.RIGHT, padx=2)
 
+        row_dc_notifs = tk.Frame(card_call, bg=self.card_color)
+        row_dc_notifs.pack(fill=tk.X, pady=2)
         tk.Button(
-            card_call,
-            text="💬 Steam сообщение (Сотка на шаурму) 🎮",
+            row_dc_notifs, text="💬 Пинг / Сообщение Discord (Звук)", font=("Segoe UI", 9, "bold"),
+            bg=self.surface1, fg="#5865F2", activebackground="#5865F2", activeforeground="#ffffff",
+            bd=0, padx=8, pady=3, cursor="hand2",
+            command=lambda: self.send_command("TROLL:DISCORD_NOTIF_AUDIO")
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(
+            row_dc_notifs, text="🎧 Вход в войс Discord (Звук)", font=("Segoe UI", 9, "bold"),
+            bg=self.surface1, fg="#23a55a", activebackground="#23a55a", activeforeground="#ffffff",
+            bd=0, padx=8, pady=3, cursor="hand2",
+            command=lambda: self.send_command("TROLL:DISCORD_JOIN_AUDIO")
+        ).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
+
+        row_steam = tk.Frame(card_call, bg=self.card_color)
+        row_steam.pack(fill=tk.X, pady=2)
+        tk.Button(
+            row_steam,
+            text="💬 Steam сообщение (Плашка + Звук) 🎮",
             font=("Segoe UI", 9, "bold"),
             bg="#1b2838",
             fg="#66c0f4",
@@ -1375,7 +1413,21 @@ class ModernControlPanel:
             pady=3,
             cursor="hand2",
             command=lambda: self.send_command("TROLL:STEAM")
-        ).pack(fill=tk.X, pady=2)
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(
+            row_steam,
+            text="🔊 Только звук",
+            font=("Segoe UI", 8, "bold"),
+            bg=self.surface1,
+            fg="#66c0f4",
+            activebackground="#66c0f4",
+            activeforeground=self.accent_dark,
+            bd=0,
+            padx=6,
+            pady=3,
+            cursor="hand2",
+            command=lambda: self.send_command("TROLL:STEAM_AUDIO")
+        ).pack(side=tk.RIGHT, padx=2)
 
         card_snd, _ = self.create_card(tab, "🚪 3D АУДИО & ВНЕЗАПНЫЕ ЭФФЕКТЫ", "Звуки присутствия и визуальные вспышки", self.accent_peach)
         tk.Button(
@@ -1522,7 +1574,7 @@ class ModernControlPanel:
 
     def is_continuous_or_slider_cmd(self, command: str) -> bool:
         return command.startswith((
-            "JITTER:", "CURSOR_SCALE:", "AUDIO_DESYNC:", "SET_FPS:", "SPAWN_NOTE:",
+            "JITTER:", "CURSOR_SCALE:", "SENSITIVITY:", "AUDIO_DESYNC:", "SET_FPS:", "SPAWN_NOTE:",
             "INPUT_LAG:", "CS_CHAOS_MIN:", "CS_CHAOS_MAX:", "CS_CHAOS_RANGE:",
             "BLACK_HOLE_STRENGTH:"
         ))
@@ -1620,7 +1672,7 @@ class ModernControlPanel:
             "CHAOS_OFF", "WIND_OFF", "MAGNET_OFF", "BLACK_HOLE_OFF",
             "GRAVITY_OFF", "SCALE:1.00", "HUD_SCALE:1.00", "SPEED:1.00", "PITCH_OFF",
             "REPULSION_OFF", "JITTER:0", "INPUT_LAG:0", "CLONES_OFF", "HIDE_CURSOR:OFF",
-            "BUSY_CURSOR_OFF", "CURSOR_SCALE:1.00", "INVERT_RESET", "JAM_RESET",
+            "BUSY_CURSOR_OFF", "CURSOR_SCALE:1.00", "SENSITIVITY:1.00", "INVERT_RESET", "JAM_RESET",
             "DRUNK_OFF", "CAROUSEL_OFF", "SET_FPS:0", "CS_CHAOS_OFF", "MOSAIC_OFF",
             "INVERT_COLORS_OFF", "TUNNEL_OFF", "GHOST_SLIDERS_OFF", "AUDIO_DESYNC:0",
             "CHAMELEON_OFF", "MIRROR_PLAYFIELD_X_OFF", "MIRROR_PLAYFIELD_Y_OFF",
@@ -1640,6 +1692,9 @@ class ModernControlPanel:
         if hasattr(self, "jit_scale"): self.jit_scale.set(0)
         if hasattr(self, "lag_scale"): self.lag_scale.set(0)
         if hasattr(self, "cscale_slider"): self.cscale_slider.set(1.0)
+        if hasattr(self, "sens_slider"):
+            self.sens_slider.set(1.0)
+            if hasattr(self, "sens_badge"): self.sens_badge.config(text="1.00x")
         if hasattr(self, "bh_scale"): self.bh_scale.set(1.0)
         if hasattr(self, "fps_scale"): self.fps_scale.set(60)
         if hasattr(self, "desync_scale"): self.desync_scale.set(0)

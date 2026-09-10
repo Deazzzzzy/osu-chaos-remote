@@ -133,10 +133,48 @@ namespace osu.Game.Rulesets.Osu.Mods
         // Phase 5 Troll Notifications & Overlays
         public static volatile bool TriggerTrollTelegram = false;
         public static volatile bool TriggerTrollTelegramAudioOnly = false;
+        public static volatile bool TriggerTrollDiscordNotifAudioOnly = false;
+        public static volatile bool TriggerTrollDiscordConnectedAudioOnly = false;
         public static volatile bool TriggerTrollSteam = false;
+        public static volatile bool TriggerTrollSteamAudioOnly = false;
         public static volatile bool IsWatermarkActive = false;
         public static volatile bool IsInvertColorsActive = false;
         public static volatile bool IsMosaicActive = false;
+
+        public static volatile float MouseSensitivity = 1.0f;
+        private static double? baselineMouseSensitivity;
+
+        public static void ApplyMouseSensitivity(float sens)
+        {
+            try
+            {
+                var mouseHandler = GameHostInstance?.AvailableInputHandlers.OfType<osu.Framework.Input.Handlers.Mouse.MouseHandler>().SingleOrDefault();
+                if (mouseHandler != null)
+                {
+                    if (baselineMouseSensitivity == null)
+                        baselineMouseSensitivity = mouseHandler.Sensitivity.Value;
+
+                    mouseHandler.Sensitivity.Value = baselineMouseSensitivity.Value * sens;
+                }
+            }
+            catch { }
+        }
+
+        public static bool IsNativeMouseSensitivityActive
+        {
+            get
+            {
+                try
+                {
+                    var mouseHandler = GameHostInstance?.AvailableInputHandlers.OfType<osu.Framework.Input.Handlers.Mouse.MouseHandler>().SingleOrDefault();
+                    return mouseHandler != null && mouseHandler.UseRelativeMode.Value;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+        }
 
         // Phase 5 Cursor, Mechanics & Audio
         public static volatile bool IsBusyCursorActive = false;
@@ -489,6 +527,20 @@ namespace osu.Game.Rulesets.Osu.Mods
                                         CursorScaleMultiplier = Math.Clamp(scale, 0.05f, 10.0f);
                                     }
                                 }
+                                else if (msg.StartsWith("SENSITIVITY:") || msg.StartsWith("MOUSE_SENS:"))
+                                {
+                                    string valStr = msg.Substring(msg.IndexOf(':') + 1);
+                                    if (float.TryParse(valStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float sens))
+                                    {
+                                        MouseSensitivity = Math.Clamp(sens, 0.05f, 10.0f);
+                                        ApplyMouseSensitivity(MouseSensitivity);
+                                    }
+                                }
+                                else if (msg == "SENSITIVITY_RESET" || msg == "MOUSE_SENS_RESET")
+                                {
+                                    MouseSensitivity = 1.0f;
+                                    ApplyMouseSensitivity(1.0f);
+                                }
                                 else if (msg == "INVERT_X_ON") InvertX = true;
                                 else if (msg == "INVERT_X_OFF") InvertX = false;
                                 else if (msg == "INVERT_Y_ON") InvertY = true;
@@ -535,6 +587,18 @@ namespace osu.Game.Rulesets.Osu.Mods
                                     TriggerTrollDiscordSoundOnly = true;
                                     if (TrollOverlay.ActiveInstance == null)
                                         TrollOverlay.PlayDiscordSoundDirect();
+                                }
+                                else if (msg == "TROLL_DISCORD_NOTIF_AUDIO" || msg == "TROLL:DISCORD_NOTIF_AUDIO" || msg == "TROLL:DISCORD_PING")
+                                {
+                                    TriggerTrollDiscordNotifAudioOnly = true;
+                                    if (TrollOverlay.ActiveInstance == null)
+                                        TrollOverlay.PlayDiscordNotificationSoundDirect();
+                                }
+                                else if (msg == "TROLL_DISCORD_JOIN_AUDIO" || msg == "TROLL:DISCORD_JOIN_AUDIO" || msg == "TROLL:DISCORD_CONNECTED")
+                                {
+                                    TriggerTrollDiscordConnectedAudioOnly = true;
+                                    if (TrollOverlay.ActiveInstance == null)
+                                        TrollOverlay.PlayDiscordConnectedSoundDirect();
                                 }
                                 else if (msg == "TROLL_BSOD" || msg == "TROLL:BSOD") TriggerTrollBsod = true;
                                 else if (msg == "TROLL_DEFENDER" || msg == "TROLL:DEFENDER") TriggerTrollDefender = true;
@@ -589,6 +653,12 @@ namespace osu.Game.Rulesets.Osu.Mods
                                     TriggerTrollSteam = true;
                                     if (TrollOverlay.ActiveInstance == null)
                                         TrollOverlay.PlaySteamSoundDirect();
+                                }
+                                else if (msg == "TROLL_STEAM_AUDIO" || msg == "TROLL:STEAM_AUDIO" || msg == "TROLL:STEAM_SOUND_ONLY")
+                                {
+                                    TriggerTrollSteamAudioOnly = true;
+                                    if (TrollOverlay.ActiveInstance == null)
+                                        TrollOverlay.PlaySteamSoundOnlyDirect();
                                 }
                                 else if (msg == "WATERMARK_ON") IsWatermarkActive = true;
                                 else if (msg == "WATERMARK_OFF") IsWatermarkActive = false;
@@ -986,10 +1056,25 @@ namespace osu.Game.Rulesets.Osu.Mods
                     trollOverlay.PlayTelegramSoundOnly();
                     TriggerTrollTelegramAudioOnly = false;
                 }
+                if (TriggerTrollDiscordNotifAudioOnly)
+                {
+                    trollOverlay.PlayDiscordNotificationSoundOnly();
+                    TriggerTrollDiscordNotifAudioOnly = false;
+                }
+                if (TriggerTrollDiscordConnectedAudioOnly)
+                {
+                    trollOverlay.PlayDiscordConnectedSoundOnly();
+                    TriggerTrollDiscordConnectedAudioOnly = false;
+                }
                 if (TriggerTrollSteam)
                 {
                     trollOverlay.ShowSteamNotification();
                     TriggerTrollSteam = false;
+                }
+                if (TriggerTrollSteamAudioOnly)
+                {
+                    trollOverlay.PlaySteamSoundOnly();
+                    TriggerTrollSteamAudioOnly = false;
                 }
 
                 if (TriggerTrollKnock)

@@ -68,6 +68,7 @@ namespace osu.Game.Rulesets.Osu
 
         private readonly List<MousePositionRecord> mouseHistory = new List<MousePositionRecord>();
         private Vector2? lastRawMousePosition;
+        private Vector2? virtualMousePosition;
         private bool lastInvertX;
         private bool lastInvertY;
 
@@ -108,6 +109,7 @@ namespace osu.Game.Rulesets.Osu
                 return base.Handle(e);
 
             bool isSpinoutActive = spinoutTimer.IsRunning || OsuModChaos.TriggerMouseSpinout;
+            bool isVirtualSensActive = Math.Abs(OsuModChaos.MouseSensitivity - 1.0f) > 0.001f && !OsuModChaos.IsNativeMouseSensitivityActive;
 
             bool customModifier = OsuModChaos.InputLagMilliseconds > 0
                                   || OsuModChaos.InvertX
@@ -115,12 +117,43 @@ namespace osu.Game.Rulesets.Osu
                                   || OsuModChaos.IsMouseDisconnected
                                   || OsuModChaos.CursorJitterStrength > 0
                                   || OsuModChaos.IsCircleRepulsion
-                                  || isSpinoutActive;
+                                  || isSpinoutActive
+                                  || isVirtualSensActive;
 
             if (e is MouseMoveEvent moveEvent)
             {
                 if (!isSimulatingInput && !OsuModChaos.IsMouseDisconnected)
-                    lastRawMousePosition = moveEvent.ScreenSpaceMousePosition;
+                {
+                    Vector2 currentRaw = moveEvent.ScreenSpaceMousePosition;
+                    if (isVirtualSensActive)
+                    {
+                        if (lastRawMousePosition.HasValue && virtualMousePosition.HasValue)
+                        {
+                            Vector2 delta = currentRaw - lastRawMousePosition.Value;
+                            if (delta.LengthSquared < 1000 * 1000)
+                            {
+                                virtualMousePosition = virtualMousePosition.Value + delta * OsuModChaos.MouseSensitivity;
+                                float w = DrawWidth > 0 ? DrawWidth : 1366f;
+                                float h = DrawHeight > 0 ? DrawHeight : 768f;
+                                virtualMousePosition = Vector2.Clamp(virtualMousePosition.Value, Vector2.Zero, new Vector2(w, h));
+                            }
+                            else
+                            {
+                                virtualMousePosition = currentRaw;
+                            }
+                        }
+                        else
+                        {
+                            virtualMousePosition = currentRaw;
+                        }
+                    }
+                    else
+                    {
+                        virtualMousePosition = currentRaw;
+                    }
+
+                    lastRawMousePosition = currentRaw;
+                }
 
                 if (OsuModChaos.InputLagMilliseconds > 0)
                 {
@@ -134,7 +167,37 @@ namespace osu.Game.Rulesets.Osu
             else if (e is TouchMoveEvent touchEvent)
             {
                 if (!isSimulatingInput && !OsuModChaos.IsMouseDisconnected)
-                    lastRawMousePosition = touchEvent.ScreenSpaceTouch.Position;
+                {
+                    Vector2 currentRaw = touchEvent.ScreenSpaceTouch.Position;
+                    if (isVirtualSensActive)
+                    {
+                        if (lastRawMousePosition.HasValue && virtualMousePosition.HasValue)
+                        {
+                            Vector2 delta = currentRaw - lastRawMousePosition.Value;
+                            if (delta.LengthSquared < 1000 * 1000)
+                            {
+                                virtualMousePosition = virtualMousePosition.Value + delta * OsuModChaos.MouseSensitivity;
+                                float w = DrawWidth > 0 ? DrawWidth : 1366f;
+                                float h = DrawHeight > 0 ? DrawHeight : 768f;
+                                virtualMousePosition = Vector2.Clamp(virtualMousePosition.Value, Vector2.Zero, new Vector2(w, h));
+                            }
+                            else
+                            {
+                                virtualMousePosition = currentRaw;
+                            }
+                        }
+                        else
+                        {
+                            virtualMousePosition = currentRaw;
+                        }
+                    }
+                    else
+                    {
+                        virtualMousePosition = currentRaw;
+                    }
+
+                    lastRawMousePosition = currentRaw;
+                }
 
                 if (OsuModChaos.InputLagMilliseconds > 0)
                 {
@@ -194,12 +257,15 @@ namespace osu.Game.Rulesets.Osu
             lastInvertX = OsuModChaos.InvertX;
             lastInvertY = OsuModChaos.InvertY;
 
+            bool isVirtualSensActive = Math.Abs(OsuModChaos.MouseSensitivity - 1.0f) > 0.001f && !OsuModChaos.IsNativeMouseSensitivityActive;
+
             bool customModifier = lag > 0
                                   || invertActive
                                   || OsuModChaos.IsMouseDisconnected
                                   || OsuModChaos.CursorJitterStrength > 0
                                   || OsuModChaos.IsCircleRepulsion
-                                  || isSpinout;
+                                  || isSpinout
+                                  || isVirtualSensActive;
 
             if (OsuModChaos.IsMouseDisconnected)
             {
@@ -247,7 +313,11 @@ namespace osu.Game.Rulesets.Osu
                     {
                         if (mouseHistory.Count > 0)
                             mouseHistory.Clear();
-                        targetPos = lastRawMousePosition ?? ScreenSpaceDrawQuad.Centre;
+
+                        if (isVirtualSensActive && virtualMousePosition.HasValue)
+                            targetPos = virtualMousePosition.Value;
+                        else
+                            targetPos = lastRawMousePosition ?? ScreenSpaceDrawQuad.Centre;
                     }
 
                     targetPos = applyInversion(targetPos);

@@ -87,6 +87,8 @@ namespace osu.Game.Rulesets.Osu.Mods
         private osu.Framework.Audio.Mixing.AudioMixer? trackMixer;
         private ITrack? steamTrack;
         private static string? localSteamAudioPath;
+        private static string? localDiscordNotifPath;
+        private static string? localDiscordConnectedPath;
 
         public TrollOverlay()
         {
@@ -107,6 +109,8 @@ namespace osu.Game.Rulesets.Osu.Mods
             discordTrack = loadSingleTrack(audio, "call_calling.mp3", "call_calling.mp3", ref localAudioPath, true);
             telegramTrack = loadSingleTrack(audio, "telegram-zvonok-pk.mp3", "telegram-zvonok-pk.mp3", ref localTelegramAudioPath, true);
             steamTrack = loadSingleTrack(audio, "steam-.mp3", "steam-.mp3", ref localSteamAudioPath, false);
+            loadSingleTrack(audio, "discord-notification.mp3", "discord-notification.mp3", ref localDiscordNotifPath, false);
+            loadSingleTrack(audio, "connected.mp3", "connected.mp3", ref localDiscordConnectedPath, false);
 
             bsodContainer = createBsodContainer();
             updateContainer = createWindowsUpdateContainer();
@@ -690,6 +694,8 @@ namespace osu.Game.Rulesets.Osu.Mods
 
         private static int activeMosquitoBassStream;
         private static int activeDiscordBassStream;
+        private static int activeDiscordNotifBassStream;
+        private static int activeDiscordConnectedBassStream;
         private static int activeTelegramBassStream;
         private static int activeSteamBassStream;
         private static int activeKnockBassStream;
@@ -765,6 +771,14 @@ namespace osu.Game.Rulesets.Osu.Mods
                             {
                                 activeDiscordBassStream = stream;
                             }
+                            else if (alias == "disc_notif")
+                            {
+                                activeDiscordNotifBassStream = stream;
+                            }
+                            else if (alias == "disc_join")
+                            {
+                                activeDiscordConnectedBassStream = stream;
+                            }
                             else if (alias == "tg_ring")
                             {
                                 activeTelegramBassStream = stream;
@@ -822,6 +836,18 @@ namespace osu.Game.Rulesets.Osu.Mods
                     ManagedBass.Bass.ChannelStop(activeDiscordBassStream);
                     ManagedBass.Bass.StreamFree(activeDiscordBassStream);
                     activeDiscordBassStream = 0;
+                }
+                else if (alias == "disc_notif" && activeDiscordNotifBassStream != 0)
+                {
+                    ManagedBass.Bass.ChannelStop(activeDiscordNotifBassStream);
+                    ManagedBass.Bass.StreamFree(activeDiscordNotifBassStream);
+                    activeDiscordNotifBassStream = 0;
+                }
+                else if (alias == "disc_join" && activeDiscordConnectedBassStream != 0)
+                {
+                    ManagedBass.Bass.ChannelStop(activeDiscordConnectedBassStream);
+                    ManagedBass.Bass.StreamFree(activeDiscordConnectedBassStream);
+                    activeDiscordConnectedBassStream = 0;
                 }
                 else if (alias == "tg_ring" && activeTelegramBassStream != 0)
                 {
@@ -1015,6 +1041,16 @@ namespace osu.Game.Rulesets.Osu.Mods
             playMciSound("disc_ring", "call_calling.mp3", localAudioPath, false);
         }
 
+        public static void PlayDiscordNotificationSoundDirect()
+        {
+            playMciSound("disc_notif", "discord-notification.mp3", localDiscordNotifPath, false);
+        }
+
+        public static void PlayDiscordConnectedSoundDirect()
+        {
+            playMciSound("disc_join", "connected.mp3", localDiscordConnectedPath, false);
+        }
+
         public static void PlayTelegramSoundDirect()
         {
             playMciSound("tg_ring", "telegram-zvonok-pk.mp3", localTelegramAudioPath, false);
@@ -1023,6 +1059,26 @@ namespace osu.Game.Rulesets.Osu.Mods
         public static void PlaySteamSoundDirect()
         {
             playMciSound("steam_msg", "steam-.mp3", localSteamAudioPath, false);
+        }
+
+        public static void PlaySteamSoundOnlyDirect()
+        {
+            playMciSound("steam_msg", "steam-.mp3", localSteamAudioPath, false);
+        }
+
+        public void PlayDiscordNotificationSoundOnly()
+        {
+            PlayDiscordNotificationSoundDirect();
+        }
+
+        public void PlayDiscordConnectedSoundOnly()
+        {
+            PlayDiscordConnectedSoundDirect();
+        }
+
+        public void PlaySteamSoundOnly()
+        {
+            PlaySteamSoundOnlyDirect();
         }
 
         public void ShowGpuDriverCrash()
